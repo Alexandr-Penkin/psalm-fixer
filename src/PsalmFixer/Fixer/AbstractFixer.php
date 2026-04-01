@@ -53,7 +53,16 @@ abstract class AbstractFixer implements FixerInterface {
                 continue;
             }
 
-            // Check nested stmts (class methods, function bodies, etc.)
+            // Check nested stmts (namespaces, class methods, function bodies, etc.)
+            if ($stmt instanceof Stmt\Namespace_ && $stmt->stmts !== null) {
+                /** @var list<Node> $nsStmts */
+                $nsStmts = $stmt->stmts;
+                if ($this->insertStatementRelative($nsStmts, $targetLine, $newStmt, $before)) {
+                    $stmt->stmts = $nsStmts;
+                    return true;
+                }
+            }
+
             if ($stmt instanceof Stmt\ClassLike) {
                 /** @var list<Node> $classStmts */
                 $classStmts = $stmt->stmts;
