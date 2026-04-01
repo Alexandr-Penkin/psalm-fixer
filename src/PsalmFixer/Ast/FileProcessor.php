@@ -114,13 +114,15 @@ final class FileProcessor {
         foreach ($issues as $issue) {
             $fixers = $this->registry->getFixersForType($issue->getType());
             if (count($fixers) === 0) {
-                $report->addNoFixer($filePath, $issue);
+                $report->addNoFixer($filePath, $issue, 'No fixer registered for ' . $issue->getType());
                 continue;
             }
 
             $fixed = false;
+            $lastReason = 'All fixers failed';
             foreach ($fixers as $fixer) {
                 if (!$fixer->canFix($issue, $stmts)) {
+                    $lastReason = $fixer->getName() . ': canFix returned false';
                     continue;
                 }
 
@@ -131,10 +133,11 @@ final class FileProcessor {
                     $anyFixed = true;
                     break;
                 }
+                $lastReason = $fixer->getName() . ': ' . ($result->getDescription() ?? 'unknown reason');
             }
 
             if (!$fixed) {
-                $report->addNotFixed($filePath, $issue);
+                $report->addNotFixed($filePath, $issue, $lastReason);
             }
         }
 

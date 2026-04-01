@@ -60,6 +60,10 @@ final class ReportPrinter {
                 $issue->getType(),
                 $issue->getMessage(),
             ));
+            $output->writeln(sprintf(
+                '    <fg=gray>Reason: %s</>',
+                $entry['reason'],
+            ));
         }
         $output->writeln('');
     }

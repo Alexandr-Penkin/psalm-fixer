@@ -13,10 +13,10 @@ final class FixReport {
     /** @var list<array{file: non-empty-string, issue: PsalmIssue, fixer: non-empty-string, description: string}> */
     private array $fixed = [];
 
-    /** @var list<array{file: non-empty-string, issue: PsalmIssue}> */
+    /** @var list<array{file: non-empty-string, issue: PsalmIssue, reason: non-empty-string}> */
     private array $notFixed = [];
 
-    /** @var list<array{file: non-empty-string, issue: PsalmIssue}> */
+    /** @var list<array{file: non-empty-string, issue: PsalmIssue, reason: non-empty-string}> */
     private array $noFixer = [];
 
     /** @var list<array{file: non-empty-string, reason: non-empty-string}> */
@@ -40,16 +40,18 @@ final class FixReport {
 
     /**
      * @param non-empty-string $file
+     * @param non-empty-string $reason
      */
-    public function addNotFixed(string $file, PsalmIssue $issue): void {
-        $this->notFixed[] = ['file' => $file, 'issue' => $issue];
+    public function addNotFixed(string $file, PsalmIssue $issue, string $reason): void {
+        $this->notFixed[] = ['file' => $file, 'issue' => $issue, 'reason' => $reason];
     }
 
     /**
      * @param non-empty-string $file
+     * @param non-empty-string $reason
      */
-    public function addNoFixer(string $file, PsalmIssue $issue): void {
-        $this->noFixer[] = ['file' => $file, 'issue' => $issue];
+    public function addNoFixer(string $file, PsalmIssue $issue, string $reason): void {
+        $this->noFixer[] = ['file' => $file, 'issue' => $issue, 'reason' => $reason];
     }
 
     /**
@@ -92,12 +94,12 @@ final class FixReport {
         return $this->fixed;
     }
 
-    /** @return list<array{file: non-empty-string, issue: PsalmIssue}> */
+    /** @return list<array{file: non-empty-string, issue: PsalmIssue, reason: non-empty-string}> */
     public function getNotFixed(): array {
         return $this->notFixed;
     }
 
-    /** @return list<array{file: non-empty-string, issue: PsalmIssue}> */
+    /** @return list<array{file: non-empty-string, issue: PsalmIssue, reason: non-empty-string}> */
     public function getNoFixer(): array {
         return $this->noFixer;
     }
