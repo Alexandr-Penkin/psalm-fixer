@@ -15,6 +15,13 @@ use PhpParser\Node\UnionType;
  */
 final class TypeStringParser {
     /**
+     * Regex pattern for matching Psalm type strings including generics.
+     * Matches: int, string, array<array-key, mixed>, Foo\Bar, list<string>, non-empty-string, etc.
+     * Uses balanced angle brackets for generics (one level of nesting).
+     */
+    private const TYPE_PATTERN = '[A-Za-z0-9_|\\\\-]+(?:<[A-Za-z0-9_|\\\\, -]+(?:<[A-Za-z0-9_|\\\\, -]+>)?[A-Za-z0-9_|\\\\, -]*>)?';
+
+    /**
      * Map of scalar type names to their cast equivalents.
      *
      * @var array<non-empty-string, non-empty-string>
@@ -163,15 +170,32 @@ final class TypeStringParser {
      * Examples:
      * - "Argument 1 of Foo::bar expects int, string provided"
      * - "expects int, float|string provided"
+     * - "cannot be mixed, expecting string"
+     * - "expects array<array-key, mixed>, list<string> provided"
+     * - "should be int"
+     * - "of type int"
      *
      * @return non-empty-string|null
      */
     public function extractExpectedType(string $message): ?string {
-        // "expects TYPE," or "expects TYPE but"
-        if (preg_match('/expects\s+([A-Za-z0-9_|\\\\]+)\s*[,\s]/i', $message, $matches) === 1) {
-            $type = $matches[1];
-            if ($type !== '') {
-                return $type;
+        /** @var list<non-empty-string> $patterns */
+        $patterns = [
+            // "expects TYPE," or "expects TYPE but" — with generic support
+            '/expects\s+(' . self::TYPE_PATTERN . ')\s*[,\s]/i',
+            // "expecting TYPE" (e.g., "cannot be mixed, expecting string")
+            '/expecting\s+(' . self::TYPE_PATTERN . ')/i',
+            // "should be TYPE"
+            '/should be\s+(' . self::TYPE_PATTERN . ')/i',
+            // "of type TYPE"
+            '/of type\s+(' . self::TYPE_PATTERN . ')/i',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $message, $matches) === 1) {
+                $type = $matches[1];
+                if ($type !== '') {
+                    return $type;
+                }
             }
         }
 
@@ -185,7 +209,7 @@ final class TypeStringParser {
      */
     public function extractProvidedType(string $message): ?string {
         // "TYPE provided" or "TYPE given"
-        if (preg_match('/\b([A-Za-z0-9_|\\\\]+)\s+(?:provided|given)/i', $message, $matches) === 1) {
+        if (preg_match('/\b(' . self::TYPE_PATTERN . ')\s+(?:provided|given)/i', $message, $matches) === 1) {
             $type = $matches[1];
             if ($type !== '') {
                 return $type;

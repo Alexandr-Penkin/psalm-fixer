@@ -6,11 +6,14 @@ namespace PsalmFixer\Fixer\Mixed;
 
 use PhpParser\Node;
 use PhpParser\Node\Arg;
+use PhpParser\Node\Expr\Assign;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\Instanceof_;
 use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Expression;
+use PhpParser\Node\Stmt\Return_;
 use PsalmFixer\Ast\TypeStringParser;
 use PsalmFixer\Fixer\AbstractFixer;
 use PsalmFixer\Fixer\FixResult;
@@ -53,17 +56,20 @@ final class MixedAssignmentFixer extends AbstractFixer {
             return FixResult::notFixed('Could not extract variable name');
         }
 
-        // For mixed assignments, we add assert(is_type()) after the line.
-        // Try to detect expected type from usage context in the message.
+        // Try to detect expected type from message
         $expectedType = $this->typeParser->extractExpectedType($issue->getMessage());
 
-        // If we can't determine the type, use a generic is_scalar or is_array check
-        if ($expectedType !== null) {
-            $assertExpr = $this->buildAssertExpr($varName, $expectedType);
-        } else {
-            // Default: just add a comment that type needs to be specified
+        // Fallback: infer type from containing function's return type
+        // (if the variable is used in a return statement)
+        if ($expectedType === null) {
+            $expectedType = $this->inferTypeFromContext($stmts, $issue->getLineFrom(), $varName);
+        }
+
+        if ($expectedType === null) {
             return FixResult::notFixed('Cannot determine expected type for mixed assignment');
         }
+
+        $assertExpr = $this->buildAssertExpr($varName, $expectedType);
 
         if ($assertExpr === null) {
             return FixResult::notFixed("Cannot create assert for type: {$expectedType}");
@@ -96,6 +102,56 @@ final class MixedAssignmentFixer extends AbstractFixer {
                 new Variable($varName),
                 new Name\FullyQualified(ltrim($type, '\\')),
             );
+        }
+
+        return null;
+    }
+
+    /**
+     * Try to infer expected type from how the variable is used in the containing function.
+     *
+     * @param list<Node> $stmts
+     * @param non-empty-string $varName
+     * @return non-empty-string|null
+     */
+    private function inferTypeFromContext(array $stmts, int $line, string $varName): ?string {
+        $func = $this->nodeFinder->findContainingFunction($stmts, $line);
+        if ($func === null || $func->stmts === null) {
+            return null;
+        }
+
+        // Check if variable is directly returned → use function return type
+        foreach ($func->stmts as $stmt) {
+            if ($stmt instanceof Return_
+                && $stmt->expr instanceof Variable
+                && $stmt->expr->name === $varName
+                && $func->returnType !== null
+            ) {
+                return $this->typeNodeToString($func->returnType);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return non-empty-string|null
+     */
+    private function typeNodeToString(Node\ComplexType|Identifier|Name|null $type): ?string {
+        if ($type instanceof Identifier) {
+            $name = $type->name;
+            if ($name !== '' && $name !== 'void' && $name !== 'never' && $name !== 'mixed') {
+                return $name;
+            }
+        }
+        if ($type instanceof Name) {
+            $name = $type->toString();
+            if ($name !== '') {
+                return $name;
+            }
+        }
+        if ($type instanceof Node\NullableType) {
+            return $this->typeNodeToString($type->type);
         }
 
         return null;

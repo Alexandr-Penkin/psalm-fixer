@@ -1,40 +1,40 @@
 # psalm-fixer
 
-Автоматическое исправление ошибок [Psalm](https://psalm.dev/) через AST-трансформации с использованием [nikic/php-parser](https://github.com/nikic/PHP-Parser).
+Automatic fixing of [Psalm](https://psalm.dev/) static analysis issues via AST transformations using [nikic/php-parser](https://github.com/nikic/PHP-Parser).
 
-## Установка
+## Installation
 
 ```bash
 composer require zoon/psalm-fixer --dev
 ```
 
-## Использование
+## Usage
 
 ```bash
-# Запустить Psalm с JSON-выводом и передать фиксеру
+# Run Psalm with JSON output and pipe to the fixer
 vendor/bin/psalm --output-format=json | bin/psalm-fixer fix -
 
-# Или через файл
+# Or via file
 vendor/bin/psalm --output-format=json > psalm-issues.json
 bin/psalm-fixer fix psalm-issues.json
 ```
 
-### Опции
+### Options
 
-| Опция | Описание |
-|-------|----------|
-| `--dry-run` | Показать что будет исправлено, без изменения файлов |
-| `--diff` | Показать diff изменений (включает `--dry-run`) |
-| `--backup` | Создать `.bak` файлы перед изменением |
-| `--issue-type=X,Y` | Исправлять только указанные типы ошибок |
-| `--file=pattern` | Исправлять только в файлах, содержащих паттерн |
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Show what would be fixed without modifying files |
+| `--diff` | Show diff of changes (implies `--dry-run`) |
+| `--backup` | Create `.bak` files before modifying |
+| `--issue-type=X,Y` | Fix only the specified issue types |
+| `--file=pattern` | Fix only files matching the pattern |
 
 ```bash
-# Посмотреть все доступные фиксеры
+# List all available fixers
 bin/psalm-fixer list-fixers
 ```
 
-## Поддерживаемые типы ошибок
+## Supported Issue Types
 
 **CodeQuality** — RedundantCast, RedundantIdentityWithTrue, UnusedForeachValue, UnusedClosureParam
 
@@ -46,13 +46,13 @@ bin/psalm-fixer list-fixers
 
 **Mixed** — MixedArgument, MixedAssignment, MixedMethodCall, MixedReturnStatement, MixedPropertyFetch, MixedArrayAccess
 
-**Docblock** — MismatchingDocblockPropertyType
+**Docblock** — MismatchingDocblockPropertyType, UnusedPsalmSuppress
 
-## Требования
+## Requirements
 
 - PHP >= 8.0
-- Psalm >= 6.15 (для генерации JSON-вывода)
+- Psalm >= 6.15 (for JSON output generation)
 
-## Лицензия
+## License
 
 MIT

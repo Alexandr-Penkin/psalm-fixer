@@ -51,6 +51,9 @@ final class MixedArgumentFixer extends AbstractFixer {
 
         $varName = $this->extractVarName($issue->getMessage());
         if ($varName === null) {
+            $varName = $this->extractVarName($issue->getSnippet() ?? '');
+        }
+        if ($varName === null) {
             return FixResult::notFixed('Could not extract variable name');
         }
 

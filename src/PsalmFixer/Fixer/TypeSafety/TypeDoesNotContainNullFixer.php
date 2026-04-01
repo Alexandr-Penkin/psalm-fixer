@@ -61,6 +61,12 @@ final class TypeDoesNotContainNullFixer extends AbstractFixer {
             }
 
             // Recurse
+            if ($stmt instanceof Node\Stmt\Namespace_ && $stmt->stmts !== null) {
+                $result = $this->removeDeadBranch($stmt->stmts, $line);
+                if ($result->isFixed()) {
+                    return $result;
+                }
+            }
             if ($stmt instanceof Node\Stmt\ClassLike && is_array($stmt->stmts)) {
                 $result = $this->removeDeadBranch($stmt->stmts, $line);
                 if ($result->isFixed()) {

@@ -10,6 +10,7 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\NullableType;
 use PhpParser\Node\Stmt\Property;
+use PhpParser\Node\UnionType;
 use PsalmFixer\Fixer\AbstractFixer;
 use PsalmFixer\Fixer\FixResult;
 use PsalmFixer\Parser\PsalmIssue;
@@ -77,6 +78,17 @@ final class PropertyNotSetInConstructorFixer extends AbstractFixer {
         // Nullable types default to null
         if ($type instanceof NullableType) {
             return new Expr\ConstFetch(new Name('null'));
+        }
+
+        // Union types: if one of the types is null, default to null
+        if ($type instanceof UnionType) {
+            foreach ($type->types as $unionMember) {
+                if ($unionMember instanceof Identifier && $unionMember->name === 'null') {
+                    return new Expr\ConstFetch(new Name('null'));
+                }
+            }
+
+            return null;
         }
 
         if ($type instanceof Identifier) {

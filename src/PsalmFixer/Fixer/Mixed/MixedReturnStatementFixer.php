@@ -48,6 +48,12 @@ final class MixedReturnStatementFixer extends AbstractFixer {
     #[\Override]
     public function fix(PsalmIssue $issue, array &$stmts): FixResult {
         $expectedType = $this->typeParser->extractExpectedType($issue->getMessage());
+
+        // Fallback: extract return type from containing method/function
+        if ($expectedType === null) {
+            $expectedType = $this->extractReturnTypeFromMethod($stmts, $issue->getLineFrom());
+        }
+
         if ($expectedType === null) {
             return FixResult::notFixed('Could not extract expected return type');
         }
@@ -109,6 +115,50 @@ final class MixedReturnStatementFixer extends AbstractFixer {
         }
 
         return FixResult::notFixed('Could not find return statement');
+    }
+
+    /**
+     * Extract the return type from the containing method/function declaration.
+     *
+     * @param list<Node> $stmts
+     * @return non-empty-string|null
+     */
+    private function extractReturnTypeFromMethod(array $stmts, int $line): ?string {
+        $func = $this->nodeFinder->findContainingFunction($stmts, $line);
+        if ($func === null || $func->returnType === null) {
+            return null;
+        }
+
+        $returnType = $func->returnType;
+        if ($returnType instanceof Node\Identifier) {
+            $name = $returnType->name;
+            if ($name !== '' && $name !== 'void' && $name !== 'never' && $name !== 'mixed') {
+                return $name;
+            }
+        }
+        if ($returnType instanceof Node\Name) {
+            $name = $returnType->toString();
+            if ($name !== '') {
+                return $name;
+            }
+        }
+        if ($returnType instanceof Node\NullableType) {
+            $inner = $returnType->type;
+            if ($inner instanceof Node\Identifier) {
+                $name = $inner->name;
+                if ($name !== '') {
+                    return $name;
+                }
+            }
+            if ($inner instanceof Node\Name) {
+                $name = $inner->toString();
+                if ($name !== '') {
+                    return $name;
+                }
+            }
+        }
+
+        return null;
     }
 
     /** @return non-empty-string|null */
