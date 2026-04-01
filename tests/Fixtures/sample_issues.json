@@ -1,0 +1,35 @@
+[
+    {
+        "type": "RedundantCast",
+        "message": "Redundant (int) cast",
+        "file_path": "tests/Fixtures/sample.php",
+        "line_from": 4,
+        "line_to": 4,
+        "column_from": 10,
+        "column_to": 25,
+        "snippet": "(int)$alreadyInt",
+        "severity": "error"
+    },
+    {
+        "type": "PossiblyNullReference",
+        "message": "Cannot call method getName on possibly null value",
+        "file_path": "tests/Fixtures/sample.php",
+        "line_from": 9,
+        "line_to": 9,
+        "column_from": 5,
+        "column_to": 25,
+        "snippet": "$obj->getName()",
+        "severity": "error"
+    },
+    {
+        "type": "RedundantIdentityWithTrue",
+        "message": "Redundant identity with true",
+        "file_path": "tests/Fixtures/sample.php",
+        "line_from": 13,
+        "line_to": 13,
+        "column_from": 5,
+        "column_to": 20,
+        "snippet": "$isValid === true",
+        "severity": "info"
+    }
+]

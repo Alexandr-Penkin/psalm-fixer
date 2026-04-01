@@ -1,0 +1,83 @@
+<?php
+
+declare(strict_types=1);
+
+namespace PsalmFixer\Cli\Command;
+
+use PsalmFixer\Ast\FileProcessor;
+use PsalmFixer\Fixer\FixerRegistry;
+use PsalmFixer\Parser\PsalmOutputParser;
+use PsalmFixer\Report\ReportPrinter;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\OutputInterface;
+
+final class FixCommand extends Command {
+    protected function configure(): void {
+        $this
+            ->setName('fix')
+            ->setDescription('Fix Psalm issues from JSON output')
+            ->addArgument('source', InputArgument::REQUIRED, 'Path to Psalm JSON output file, or "-" for STDIN')
+            ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Show what would be fixed without modifying files')
+            ->addOption('diff', null, InputOption::VALUE_NONE, 'Show diff of changes (implies --dry-run)')
+            ->addOption('backup', null, InputOption::VALUE_NONE, 'Create .bak files before modifying')
+            ->addOption('issue-type', null, InputOption::VALUE_REQUIRED, 'Comma-separated list of issue types to fix')
+            ->addOption('file', null, InputOption::VALUE_REQUIRED, 'Comma-separated list of file patterns to filter')
+        ;
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int {
+        /** @var non-empty-string $source */
+        $source = $input->getArgument('source');
+        $dryRun = $input->getOption('dry-run') === true || $input->getOption('diff') === true;
+        $showDiff = $input->getOption('diff') === true;
+        $backup = $input->getOption('backup') === true;
+
+        /** @var string|null $issueTypeRaw */
+        $issueTypeRaw = $input->getOption('issue-type');
+        /** @var string|null $fileRaw */
+        $fileRaw = $input->getOption('file');
+
+        /** @var list<non-empty-string>|null $issueTypeFilter */
+        $issueTypeFilter = null;
+        if (is_string($issueTypeRaw) && $issueTypeRaw !== '') {
+            $issueTypeFilter = array_filter(explode(',', $issueTypeRaw), static fn(string $s): bool => $s !== '');
+        }
+
+        /** @var list<non-empty-string>|null $fileFilter */
+        $fileFilter = null;
+        if (is_string($fileRaw) && $fileRaw !== '') {
+            $fileFilter = array_filter(explode(',', $fileRaw), static fn(string $s): bool => $s !== '');
+        }
+
+        $parser = new PsalmOutputParser();
+        $registry = FixerRegistry::createDefault();
+        $processor = new FileProcessor($registry);
+        $printer = new ReportPrinter();
+
+        try {
+            $issues = $parser->parse($source);
+        } catch (\RuntimeException $e) {
+            $output->writeln("<error>{$e->getMessage()}</error>");
+            return Command::FAILURE;
+        }
+
+        $output->writeln(sprintf('Parsed <info>%d</info> issues from Psalm output.', count($issues)));
+
+        if (count($issues) === 0) {
+            $output->writeln('No issues to fix.');
+            return Command::SUCCESS;
+        }
+
+        if ($dryRun) {
+            $output->writeln('<comment>Dry run mode — no files will be modified.</comment>');
+        }
+
+        $report = $processor->processIssues($issues, $dryRun, $issueTypeFilter, $fileFilter, $backup);
+        $printer->print($report, $output, $showDiff);
+
+        return $report->getFixedCount() > 0 ? Command::SUCCESS : Command::FAILURE;
+    }
+}
