@@ -7,7 +7,7 @@ psalm-fixer reads Psalm's JSON output, matches each issue to a registered fixer,
 ## Installation
 
 ```bash
-composer require zoon/psalm-fixer --dev
+composer require alexandr-penkin/psalm-fixer --dev
 ```
 
 ## Usage
