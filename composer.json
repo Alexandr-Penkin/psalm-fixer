@@ -1,5 +1,5 @@
 {
-    "name": "zoon/psalm-fixer",
+    "name": "Alexandr-Penkin/psalm-fixer",
     "description": "Automatic fixer for Psalm static analysis issues via AST transformations",
     "type": "library",
     "license": "MIT",
