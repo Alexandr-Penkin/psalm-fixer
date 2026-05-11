@@ -18,13 +18,14 @@ use PsalmFixer\Parser\PsalmIssue;
 
 /**
  * Removes redundant conditions: always-true → unwrap body, always-false → keep else.
- *
+ * 
  * Direction is taken from the Psalm message when available; otherwise from the
  * if-condition AST (literal true / false). The AST fallback lets the fixer work
  * with baseline input that carries no message text.
- *
+ * 
  * For compound `&&` chains, also strips an individual redundant operand without
  * unwrapping the whole if.
+ * @psalm-suppress MixedReturnTypeCoercion
  */
 final class RedundantConditionFixer extends AbstractIfWalkingFixer {
     use AppendsPsalmSuppress;
@@ -58,11 +59,72 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
             return $result;
         }
 
-        // No `if` at the target line — the redundancy is on a different
-        // statement shape (typically `assert(is_array($x));`). The safest
-        // generic remedy is a suppress annotation so the original semantics
-        // (and any side effects) are preserved.
-        return $this->attachPsalmSuppress($stmts, $issue->getLineFrom(), $issue->getType());
+        // No `if` at the target line. Fall back to a suppress annotation only
+        // when the statement on that line is an `assert(...)` call (the typical
+        // non-`if` shape Psalm flags as RedundantCondition). For any other
+        // statement we refuse — a generic suppress would non-deterministically
+        // attach to whatever code is at the line, including code an earlier
+        // pass already cleaned up, which would break idempotence.
+        if ($this->lineCarriesAssertCall($stmts, $issue->getLineFrom())) {
+            return $this->attachPsalmSuppress($stmts, $issue->getLineFrom(), $issue->getType());
+        }
+
+        return FixResult::notFixed('No if or assert statement at target line');
+    }
+
+    /**
+     * Return true if the statement at $line is an expression-statement that
+     * directly calls `assert(...)`. Used to scope the suppress fallback.
+     *
+     * @param iterable<Node> $stmts
+     */
+    private function lineCarriesAssertCall(iterable $stmts, int $line): bool {
+        foreach ($stmts as $stmt) {
+            if ($stmt instanceof Expression
+                && $stmt->getStartLine() === $line
+                && $stmt->expr instanceof FuncCall
+                && $stmt->expr->name instanceof Node\Name
+                && strtolower($stmt->expr->name->toString()) === 'assert'
+            ) {
+                return true;
+            }
+
+            $nested = $this->nestedStmtsOf($stmt);
+            if ($nested !== null && $this->lineCarriesAssertCall($nested, $line)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Return the nested statement list of a block-shaped node, or null when
+     * the node has no recursable body. Trusts Psalm's php-parser stubs (no
+     * defensive `!== null` / `is_array` checks; those would be flagged as
+     * redundant). Return type matches the stubs (`array<Node\Stmt>`) rather
+     * than `list<Node\Stmt>` because ClassLike/ClassMethod $stmts are typed
+     * as arrays by the stubs.
+     *
+     * @return array<int, Node\Stmt>|null
+     */
+    private function nestedStmtsOf(Node $stmt): ?array {
+        if ($stmt instanceof Node\Stmt\Namespace_) {
+            return $stmt->stmts;
+        }
+        if ($stmt instanceof Node\Stmt\ClassLike) {
+            /** @psalm-suppress MixedReturnTypeCoercion */
+            return $stmt->stmts;
+        }
+        if ($stmt instanceof Node\Stmt\ClassMethod || $stmt instanceof Node\Stmt\Function_) {
+            /** @psalm-suppress MixedReturnTypeCoercion */
+            return $stmt->stmts;
+        }
+        if ($stmt instanceof If_ || $stmt instanceof Node\Stmt\While_ || $stmt instanceof Node\Stmt\For_ || $stmt instanceof Node\Stmt\Foreach_) {
+            return $stmt->stmts;
+        }
+
+        return null;
     }
 
     #[\Override]

@@ -1,0 +1,46 @@
+[
+    {
+        "type": "MissingOverrideAttribute",
+        "message": "SampleChild::foo should have the \"Override\" attribute",
+        "file_path": "__SAMPLE__",
+        "line_from": 15,
+        "line_to": 15,
+        "column_from": 5,
+        "column_to": 36,
+        "snippet": "    public function foo(): void {",
+        "severity": "error"
+    },
+    {
+        "type": "MissingOverrideAttribute",
+        "message": "SampleChild::bar should have the \"Override\" attribute",
+        "file_path": "__SAMPLE__",
+        "line_from": 21,
+        "line_to": 21,
+        "column_from": 5,
+        "column_to": 36,
+        "snippet": "    public function bar(): string {",
+        "severity": "error"
+    },
+    {
+        "type": "RedundantCondition",
+        "message": "Type true for if is always true",
+        "file_path": "__SAMPLE__",
+        "line_from": 16,
+        "line_to": 16,
+        "column_from": 9,
+        "column_to": 16,
+        "snippet": "        if (true) {",
+        "severity": "error"
+    },
+    {
+        "type": "RedundantCondition",
+        "message": "'' can never contain non-empty-string",
+        "file_path": "__SAMPLE__",
+        "line_from": 23,
+        "line_to": 23,
+        "column_from": 13,
+        "column_to": 28,
+        "snippet": "        if ($name !== '') {",
+        "severity": "error"
+    }
+]

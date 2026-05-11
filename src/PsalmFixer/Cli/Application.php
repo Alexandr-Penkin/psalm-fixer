@@ -10,7 +10,7 @@ use Symfony\Component\Console\Application as BaseApplication;
 
 final class Application extends BaseApplication {
     public function __construct() {
-        parent::__construct('psalm-fixer', '0.1.0');
+        parent::__construct('psalm-fixer', '0.2.0');
 
         $this->addCommand(new FixCommand());
         $this->addCommand(new ListFixersCommand());
