@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace PsalmFixer\Fixer\TypeSafety;
 
-use PhpParser\Comment\Doc;
 use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\BinaryOp;
@@ -18,6 +17,7 @@ use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use PsalmFixer\Ast\TypeStringParser;
 use PsalmFixer\Fixer\AbstractFixer;
+use PsalmFixer\Fixer\AppendsPsalmSuppress;
 use PsalmFixer\Fixer\FixResult;
 use PsalmFixer\Parser\PsalmIssue;
 
@@ -36,7 +36,7 @@ use PsalmFixer\Parser\PsalmIssue;
  * argument of the call located at the issue line.
  */
 final class ArgumentTypeCoercionFixer extends AbstractFixer {
-    private const SUPPRESS_TAG = '@psalm-suppress ArgumentTypeCoercion';
+    use AppendsPsalmSuppress;
 
     private TypeStringParser $typeParser;
 
@@ -234,103 +234,10 @@ final class ArgumentTypeCoercionFixer extends AbstractFixer {
 
     /**
      * Last resort — annotate the offending statement with @psalm-suppress.
-     * Behaves like `PropertyTypeCoercionFixer`: merges into an existing
-     * docblock or creates a new one.
      *
      * @param list<Node> $stmts
      */
-    private function fallbackSuppress(array &$stmts, PsalmIssue $issue): FixResult {
-        $node = $this->findStatementAtLine($stmts, $issue->getLineFrom());
-        if ($node === null) {
-            return FixResult::notFixed('Could not find statement at target line for fallback suppress');
-        }
-
-        $existingDoc = $node->getDocComment();
-        if ($existingDoc !== null && str_contains($existingDoc->getText(), self::SUPPRESS_TAG)) {
-            return FixResult::notFixed('Statement already has the suppress annotation');
-        }
-
-        $node->setDocComment($this->makeDocComment($existingDoc));
-
-        return FixResult::fixed('Added @psalm-suppress ArgumentTypeCoercion (fallback)');
-    }
-
-    /**
-     * Locate the innermost `Stmt` whose line range covers $line. Prefer an exact
-     * start-line match (the typical single-line statement case), but fall back
-     * to a containing statement for multiline expressions where the offending
-     * argument sits on an inner line of e.g. a multi-line `new Foo(...)` call.
-     *
-     * @param list<Node> $stmts
-     */
-    private function findStatementAtLine(array $stmts, int $line): ?Node\Stmt {
-        $found = null;
-        $traverser = new NodeTraverser();
-        $traverser->addVisitor(new class($line, $found) extends NodeVisitorAbstract {
-            public function __construct(
-                private int $targetLine,
-                private ?Node\Stmt &$found,
-            ) {
-            }
-
-            #[\Override]
-            public function enterNode(Node $node): ?int {
-                if (!$node instanceof Node\Stmt) {
-                    return null;
-                }
-                $start = $node->getStartLine();
-                $end = $node->getEndLine();
-                if ($start > $this->targetLine || $end < $this->targetLine) {
-                    return null;
-                }
-
-                // Prefer the deepest (smallest range) match. ClassLike and
-                // ClassMethod outer Stmts span many lines, but we want the
-                // statement that actually contains the call.
-                if ($this->found === null) {
-                    $this->found = $node;
-
-                    return null;
-                }
-                $currentSpan = $node->getEndLine() - $node->getStartLine();
-                $bestSpan = $this->found->getEndLine() - $this->found->getStartLine();
-                if ($currentSpan <= $bestSpan) {
-                    $this->found = $node;
-                }
-
-                return null;
-            }
-        });
-        $traverser->traverse($stmts);
-
-        return $found;
-    }
-
-    private function makeDocComment(?Doc $existing): Doc {
-        if ($existing === null) {
-            return new Doc('/** ' . self::SUPPRESS_TAG . ' */');
-        }
-
-        $text = $existing->getText();
-        if (preg_match('#^/\*\*\s*(.*?)\s*\*/$#s', $text, $matches) !== 1) {
-            return new Doc('/** ' . self::SUPPRESS_TAG . ' */');
-        }
-
-        $body = trim($matches[1]);
-        if ($body === '') {
-            return new Doc('/** ' . self::SUPPRESS_TAG . ' */');
-        }
-
-        $lines = preg_split('/\R/', $body);
-        if ($lines === false) {
-            $lines = [$body];
-        }
-        $normalised = [];
-        foreach ($lines as $line) {
-            $normalised[] = ltrim($line, " \t*");
-        }
-        $normalised[] = self::SUPPRESS_TAG;
-
-        return new Doc("/**\n * " . implode("\n * ", $normalised) . "\n */");
+    private function fallbackSuppress(array $stmts, PsalmIssue $issue): FixResult {
+        return $this->attachPsalmSuppress($stmts, $issue->getLineFrom(), 'ArgumentTypeCoercion');
     }
 }

@@ -24,8 +24,16 @@ bin/psalm-fixer fix - < psalm-output.json        # from STDIN
 bin/psalm-fixer fix output.json --dry-run --diff  # preview changes
 bin/psalm-fixer fix output.json --issue-type=RedundantCast,MissingOverrideAttribute
 bin/psalm-fixer fix output.json --file=src/Foo.php
+bin/psalm-fixer fix --baseline=psalm-baseline.xml             # fix issues listed in a Psalm baseline XML
+bin/psalm-fixer fix --baseline=psalm-baseline.xml --dry-run --diff
 bin/psalm-fixer list-fixers                       # show all registered fixers
 ```
+
+`--baseline` and the `source` argument are mutually exclusive. With `--baseline`, the parser
+resolves each `<code>` snippet to a source line by trim+substring matching (in document order),
+and emits a warning + skip if a snippet is missing in the source (stale baseline).
+Note: baseline entries carry no Psalm message text — fixers that parse the message to decide
+the fix direction (e.g. `RedundantConditionFixer`) will report `not fixed` for those entries.
 
 ## Architecture
 

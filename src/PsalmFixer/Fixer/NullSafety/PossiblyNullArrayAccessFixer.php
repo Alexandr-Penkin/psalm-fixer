@@ -11,9 +11,9 @@ use PhpParser\Node\Expr\BinaryOp\Identical;
 use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Name;
+use PhpParser\Node\Expr\Throw_;
 use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\If_;
-use PhpParser\Node\Stmt\Throw_;
 use PsalmFixer\Fixer\AbstractFixer;
 use PsalmFixer\Fixer\FixResult;
 use PsalmFixer\Parser\PsalmIssue;
@@ -71,7 +71,6 @@ final class PossiblyNullArrayAccessFixer extends AbstractFixer {
             new ConstFetch(new Name('null')),
         );
 
-        /** @psalm-suppress MixedAssignment */
         $throw = new Throw_(
             new Node\Expr\New_(
                 new Name\FullyQualified('RuntimeException'),

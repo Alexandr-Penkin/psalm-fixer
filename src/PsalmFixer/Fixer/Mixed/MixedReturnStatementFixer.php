@@ -146,10 +146,8 @@ final class MixedReturnStatementFixer extends AbstractFixer {
                 $name = $inner->name;
                 return $name;
             }
-            if ($inner instanceof Node\Name) {
-                $name = $inner->toString();
-                return $name;
-            }
+            $name = $inner->toString();
+            return $name;
         }
 
         return null;

@@ -81,7 +81,7 @@ PHP;
         $result = $this->fixer->fix($issue, $stmts);
 
         self::assertFalse($result->isFixed());
-        self::assertSame('Statement already has the suppress annotation', $result->getDescription());
+        self::assertSame('Statement already carries @psalm-suppress MixedAssignment', $result->getDescription());
     }
 
     public function testReturnsNotFixedWhenNoStatementAtLine(): void {

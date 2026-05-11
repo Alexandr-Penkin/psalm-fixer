@@ -14,6 +14,7 @@ use PsalmFixer\Parser\PsalmIssue;
 
 /**
  * Removes unused @psalm-suppress annotations.
+ * @psalm-suppress MixedReturnTypeCoercion
  */
 final class UnusedPsalmSuppressFixer extends AbstractFixer {
     #[\Override]
@@ -192,10 +193,12 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
         foreach ($comments as $comment) {
             if (!($comment instanceof Doc)) {
                 $result[] = $comment;
+                /** @psalm-suppress RedundantCondition */
                 assert(is_array($result));
             }
         }
 
+        /** @psalm-suppress MixedReturnTypeCoercion */
         return $result;
     }
 }

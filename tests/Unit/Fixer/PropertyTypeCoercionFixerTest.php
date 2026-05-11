@@ -50,7 +50,7 @@ final class PropertyTypeCoercionFixerTest extends TestCase {
         $result = $this->fixer->fix($issue, $stmts);
 
         self::assertFalse($result->isFixed());
-        self::assertSame('Statement already has the suppress annotation', $result->getDescription());
+        self::assertSame('Statement already carries @psalm-suppress PropertyTypeCoercion', $result->getDescription());
     }
 
     public function testReturnsNotFixedWhenNoStatementAtLine(): void {

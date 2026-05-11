@@ -7,8 +7,12 @@ namespace PsalmFixer\Fixer\TypeSafety;
 use PhpParser\Node;
 use PhpParser\Node\Expr\BinaryOp;
 use PhpParser\Node\Expr\ConstFetch;
+use PhpParser\Node\Expr\FuncCall;
+use PhpParser\Node\Expr\Instanceof_;
+use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\If_;
 use PsalmFixer\Fixer\AbstractIfWalkingFixer;
+use PsalmFixer\Fixer\AppendsPsalmSuppress;
 use PsalmFixer\Fixer\FixResult;
 use PsalmFixer\Parser\PsalmIssue;
 
@@ -23,6 +27,8 @@ use PsalmFixer\Parser\PsalmIssue;
  * unwrapping the whole if.
  */
 final class RedundantConditionFixer extends AbstractIfWalkingFixer {
+    use AppendsPsalmSuppress;
+
     private const DIR_TRUE = 'true';
     private const DIR_FALSE = 'false';
 
@@ -30,7 +36,7 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
 
     #[\Override]
     public function getSupportedTypes(): array {
-        return ['RedundantCondition'];
+        return ['RedundantCondition', 'RedundantConditionGivenDocblockType'];
     }
 
     #[\Override]
@@ -48,8 +54,15 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
         $this->currentMessage = $issue->getMessage();
         /** @psalm-suppress ArgumentTypeCoercion */
         $result = $this->walkAndFix($stmts, $issue->getLineFrom());
+        if ($result !== null) {
+            return $result;
+        }
 
-        return $result ?? FixResult::notFixed('Could not find if statement at target line');
+        // No `if` at the target line — the redundancy is on a different
+        // statement shape (typically `assert(is_array($x));`). The safest
+        // generic remedy is a suppress annotation so the original semantics
+        // (and any side effects) are preserved.
+        return $this->attachPsalmSuppress($stmts, $issue->getLineFrom(), $issue->getType());
     }
 
     #[\Override]
@@ -117,6 +130,14 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
             if ($name === 'false') {
                 return self::DIR_FALSE;
             }
+        }
+
+        // `if ($var instanceof Foo)` where Psalm has already determined the
+        // variable's type. Psalm flags this as `RedundantConditionGivenDocblockType`
+        // with a message like "Docblock-defined type Foo for $var is always Foo".
+        // The instanceof is tautologically true → unwrap.
+        if ($cond instanceof Instanceof_ && str_contains($message, 'is always')) {
+            return self::DIR_TRUE;
         }
 
         return null;

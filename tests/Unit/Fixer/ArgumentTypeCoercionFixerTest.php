@@ -90,7 +90,7 @@ final class ArgumentTypeCoercionFixerTest extends TestCase {
         $result = $this->fixer->fix($issue, $stmts);
 
         self::assertFalse($result->isFixed());
-        self::assertSame('Statement already has the suppress annotation', $result->getDescription());
+        self::assertSame('Statement already carries @psalm-suppress ArgumentTypeCoercion', $result->getDescription());
     }
 
     public function testArgIndexResolutionPicksCorrectArgument(): void {

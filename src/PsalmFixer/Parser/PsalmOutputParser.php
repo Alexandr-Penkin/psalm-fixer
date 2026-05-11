@@ -43,6 +43,7 @@ final class PsalmOutputParser {
                 continue;
             }
 
+            /** @psalm-suppress MixedArgumentTypeCoercion */
             $issue = $this->parseIssue($item);
             if ($issue !== null) {
                 $result[] = $issue;

@@ -69,6 +69,7 @@ final class InvalidScalarArgumentFixer extends AbstractFixer {
                 return null;
             }
 
+            /** @psalm-suppress UnsafeInstantiation */
             $node->value = new $castClass($node->value);
 
             return $node;

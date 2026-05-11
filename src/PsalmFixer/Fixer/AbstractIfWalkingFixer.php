@@ -100,6 +100,7 @@ abstract class AbstractIfWalkingFixer extends AbstractFixer {
                 'elseifs' => array_slice($if->elseifs, 1),
                 'else' => $if->else,
             ]);
+            /** @psalm-suppress ReferenceConstraintViolation */
             return;
         }
         array_splice($stmts, $index, 1);

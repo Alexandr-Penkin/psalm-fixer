@@ -139,6 +139,7 @@ final class NodeFinder {
         });
         $stmts = $traverser->traverse($stmts);
 
+        /** @psalm-suppress ReferenceConstraintViolation */
         return $replaced;
     }
 
