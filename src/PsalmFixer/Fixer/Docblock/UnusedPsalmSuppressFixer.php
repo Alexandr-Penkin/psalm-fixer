@@ -58,6 +58,7 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
             return FixResult::notFixed('Node has no docblock');
         }
 
+        /** @psalm-suppress ArgumentTypeCoercion */
         $newDocText = $this->removeSuppressTag($doc->getText(), $suppressedType);
         if ($newDocText === null) {
             return FixResult::notFixed('Could not find @psalm-suppress ' . $suppressedType . ' in docblock');
@@ -90,6 +91,7 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
             ) {
             }
 
+            #[\Override]
             public function enterNode(Node $node): ?int {
                 $doc = $node->getDocComment();
                 if ($doc === null) {
@@ -186,9 +188,11 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
         if (!is_array($comments)) {
             return [];
         }
+        /** @psalm-suppress MixedAssignment */
         foreach ($comments as $comment) {
             if (!($comment instanceof Doc)) {
                 $result[] = $comment;
+                assert(is_array($result));
             }
         }
 

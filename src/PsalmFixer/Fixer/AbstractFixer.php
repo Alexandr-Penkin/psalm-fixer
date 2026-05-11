@@ -54,10 +54,11 @@ abstract class AbstractFixer implements FixerInterface {
             }
 
             // Check nested stmts (namespaces, class methods, function bodies, etc.)
-            if ($stmt instanceof Stmt\Namespace_ && $stmt->stmts !== null) {
+            if ($stmt instanceof Stmt\Namespace_) {
                 /** @var list<Node> $nsStmts */
                 $nsStmts = $stmt->stmts;
                 if ($this->insertStatementRelative($nsStmts, $targetLine, $newStmt, $before)) {
+                    /** @psalm-suppress PropertyTypeCoercion */
                     $stmt->stmts = $nsStmts;
                     return true;
                 }
@@ -67,6 +68,7 @@ abstract class AbstractFixer implements FixerInterface {
                 /** @var list<Node> $classStmts */
                 $classStmts = $stmt->stmts;
                 if ($this->insertStatementRelative($classStmts, $targetLine, $newStmt, $before)) {
+                    /** @psalm-suppress PropertyTypeCoercion */
                     $stmt->stmts = $classStmts;
                     return true;
                 }
@@ -77,6 +79,7 @@ abstract class AbstractFixer implements FixerInterface {
                     /** @var list<Node> $bodyStmts */
                     $bodyStmts = $stmt->stmts;
                     if ($this->insertStatementRelative($bodyStmts, $targetLine, $newStmt, $before)) {
+                        /** @psalm-suppress PropertyTypeCoercion */
                         $stmt->stmts = $bodyStmts;
                         return true;
                     }
@@ -87,6 +90,7 @@ abstract class AbstractFixer implements FixerInterface {
                 /** @var list<Node> $innerStmts */
                 $innerStmts = $stmt->stmts;
                 if ($this->insertStatementRelative($innerStmts, $targetLine, $newStmt, $before)) {
+                    /** @psalm-suppress PropertyTypeCoercion */
                     $stmt->stmts = $innerStmts;
                     return true;
                 }

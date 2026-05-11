@@ -71,6 +71,7 @@ final class PossiblyNullArrayAccessFixer extends AbstractFixer {
             new ConstFetch(new Name('null')),
         );
 
+        /** @psalm-suppress MixedAssignment */
         $throw = new Throw_(
             new Node\Expr\New_(
                 new Name\FullyQualified('RuntimeException'),

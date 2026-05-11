@@ -32,6 +32,7 @@ final class NodeFinder {
                 $this->result = null;
             }
 
+            #[\Override]
             public function enterNode(Node $node): ?int {
                 if ($node->getStartLine() <= $this->targetLine && $node->getEndLine() >= $this->targetLine) {
                     $this->result = $node;
@@ -66,6 +67,7 @@ final class NodeFinder {
             ) {
             }
 
+            #[\Override]
             public function enterNode(Node $node): ?int {
                 if ($node->getStartLine() === $this->targetLine) {
                     $this->collected[] = $node;
@@ -118,6 +120,7 @@ final class NodeFinder {
             ) {
             }
 
+            #[\Override]
             public function leaveNode(Node $node): ?Node {
                 if ($this->replaced) {
                     return null;
@@ -162,6 +165,7 @@ final class NodeFinder {
                 $this->result = null;
             }
 
+            #[\Override]
             public function enterNode(Node $node): ?int {
                 if (($node instanceof Stmt\ClassMethod || $node instanceof Stmt\Function_)
                     && $node->getStartLine() <= $this->targetLine
@@ -194,6 +198,7 @@ final class NodeFinder {
             ) {
             }
 
+            #[\Override]
             public function enterNode(Node $node): ?int {
                 if ($node instanceof Stmt\Class_
                     && $node->getStartLine() <= $this->targetLine

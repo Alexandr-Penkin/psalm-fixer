@@ -76,6 +76,7 @@ final class MixedArgumentFixer extends AbstractFixer {
     }
 
     private function buildAssertExpr(string $varName, string $type): ?Node\Expr {
+        assert($type !== '');
         $isFunc = $this->typeParser->getIsTypeFunction($type);
         if ($isFunc !== null) {
             return new FuncCall(

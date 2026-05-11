@@ -28,6 +28,10 @@ vendor/bin/psalm-fixer fix psalm-issues.json --issue-type=RedundantCast,MissingO
 
 # Fix only files matching a pattern
 vendor/bin/psalm-fixer fix psalm-issues.json --file=src/Foo.php
+
+# Fix issues listed in a Psalm baseline XML file
+vendor/bin/psalm-fixer fix --baseline=psalm-baseline.xml
+vendor/bin/psalm-fixer fix --baseline=psalm-baseline.xml --diff
 ```
 
 `fix` is the default command, so `vendor/bin/psalm-fixer psalm-issues.json` also works.
@@ -36,11 +40,20 @@ vendor/bin/psalm-fixer fix psalm-issues.json --file=src/Foo.php
 
 | Option | Description |
 |--------|-------------|
+| `--baseline=path.xml` | Read issues from a Psalm baseline XML file instead of JSON. Mutually exclusive with the JSON source argument. |
 | `--dry-run` | Show what would be fixed without modifying files |
 | `--diff` | Show diff of changes (implies `--dry-run`) |
 | `--backup` | Create `.bak` files before modifying |
 | `--issue-type=X,Y` | Fix only the specified issue types (comma-separated) |
 | `--file=pattern` | Fix only files matching the pattern (comma-separated) |
+
+### Fixing from a Psalm baseline
+
+Psalm's baseline file (`psalm-baseline.xml`) records suppressed issues by file + issue type + code snippet, but without line numbers. With `--baseline`, psalm-fixer resolves each `<code>` snippet to a source line by trim + substring matching in document order — so two identical snippets in the baseline map to the first two matching source lines. If a snippet can't be found (stale baseline) or the referenced file is missing, the entry is skipped with a `Baseline warning:` message instead of failing the run.
+
+Relative `<file src="...">` paths are resolved against the directory containing the baseline XML.
+
+**Limitation:** the baseline format does not include the original Psalm message text. Fixers that rely only on the AST node at the issue line work identically with baseline input — this includes `MissingOverrideAttribute`, `RedundantCast`, `UnusedForeachValue`, the null-safety set, `TypeDoesNotContainNullFixer` (direction is read from the comparison operator), and `RedundantConditionFixer` for literal `if (true)` / `if (false)` cases. Fixers that need the message to disambiguate (e.g. `RedundantConditionFixer` for "is never X" / "can never contain X" patterns, or `ArgumentTypeCoercionFixer`'s expected-type lookup) report those issues as `not fixed` with a clear reason instead of producing a wrong rewrite — for them, prefer running with Psalm's JSON output as the source.
 
 ### Other commands
 
@@ -65,7 +78,7 @@ After a run, psalm-fixer prints a summary grouped by:
 
 **NullSafety** — PossiblyNullReference, PossiblyNullPropertyFetch, PossiblyNullArgument, PossiblyNullArrayAccess
 
-**TypeSafety** — InvalidScalarArgument, RedundantCondition, TypeDoesNotContainNull, ArgumentTypeCoercion
+**TypeSafety** — InvalidScalarArgument, RedundantCondition, TypeDoesNotContainNull, ArgumentTypeCoercion, PropertyTypeCoercion
 
 **Mixed** — MixedArgument, MixedAssignment, MixedMethodCall, MixedReturnStatement, MixedPropertyFetch, MixedArrayAccess
 
@@ -74,19 +87,25 @@ After a run, psalm-fixer prints a summary grouped by:
 ## How it works
 
 ```
-Psalm JSON
-   -> PsalmOutputParser  (JSON -> PsalmIssue value objects)
-   -> FileProcessor      (groups issues by file, parses AST)
-   -> FixerRegistry      (maps issue type -> fixer)
-   -> Fixer              (mutates AST, returns FixResult)
-   -> format-preserving printer (writes file back)
+Psalm JSON  ─┐
+              ├─> Parser   -> PsalmIssue value objects
+Baseline XML ─┘
+                -> FileProcessor      (groups issues by file, parses AST)
+                -> FixerRegistry      (maps issue type -> fixer)
+                -> Fixer              (mutates AST, returns FixResult)
+                -> format-preserving printer (writes file back)
 ```
 
 Fixes are applied bottom-up (descending line order) so earlier edits don't shift positions of later ones. When a fixer changes the node type (e.g. `->` to `?->`) the format-preserving printer is bypassed and a full pretty-print is used as fallback.
 
+### Fix strategies
+
+Most fixers either rewrite the AST directly (insert assert, unwrap if, drop redundant operand from `&&`, etc.) or fall back to attaching a `@psalm-suppress <Type>` annotation when no safe runtime rewrite exists. The suppress-fallback is used by `ArgumentTypeCoercionFixer`, `PropertyTypeCoercionFixer` and `MixedAssignmentFixer` for generic / template types and genuinely-mixed values where Psalm cannot infer a narrower type at the call site.
+
 ## Adding a new fixer
 
 1. Create a class under `src/PsalmFixer/Fixer/<Category>/` extending `AbstractFixer`.
+   - For fixers that locate an `if` statement at the issue line, extend `AbstractIfWalkingFixer` instead — it provides the recursive walk (through namespaces, classes, methods, control-flow blocks), `spliceDeadBranch()`, and `&&`-chain helpers (`flattenAnd` / `buildAndChain`). Implement just `tryFixIf()`.
 2. Implement `getSupportedTypes()` returning the Psalm issue type strings it handles.
 3. Implement `getName()`, `getDescription()`, and `fix()`.
 4. Register it in `FixerRegistry::createDefault()`.

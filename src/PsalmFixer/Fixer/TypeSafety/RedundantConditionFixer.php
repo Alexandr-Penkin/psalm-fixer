@@ -5,140 +5,198 @@ declare(strict_types=1);
 namespace PsalmFixer\Fixer\TypeSafety;
 
 use PhpParser\Node;
+use PhpParser\Node\Expr\BinaryOp;
+use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Stmt\If_;
-use PsalmFixer\Fixer\AbstractFixer;
+use PsalmFixer\Fixer\AbstractIfWalkingFixer;
 use PsalmFixer\Fixer\FixResult;
 use PsalmFixer\Parser\PsalmIssue;
 
 /**
- * Removes redundant conditions (always true → keep body, always false → remove).
+ * Removes redundant conditions: always-true → unwrap body, always-false → keep else.
+ *
+ * Direction is taken from the Psalm message when available; otherwise from the
+ * if-condition AST (literal true / false). The AST fallback lets the fixer work
+ * with baseline input that carries no message text.
+ *
+ * For compound `&&` chains, also strips an individual redundant operand without
+ * unwrapping the whole if.
  */
-final class RedundantConditionFixer extends AbstractFixer {
+final class RedundantConditionFixer extends AbstractIfWalkingFixer {
+    private const DIR_TRUE = 'true';
+    private const DIR_FALSE = 'false';
+
+    private string $currentMessage = '';
+
+    #[\Override]
     public function getSupportedTypes(): array {
         return ['RedundantCondition'];
     }
 
+    #[\Override]
     public function getName(): string {
         return 'RedundantConditionFixer';
     }
 
+    #[\Override]
     public function getDescription(): string {
         return 'Removes redundant always-true/false conditions';
     }
 
+    #[\Override]
     public function fix(PsalmIssue $issue, array &$stmts): FixResult {
-        $message = $issue->getMessage();
+        $this->currentMessage = $issue->getMessage();
+        /** @psalm-suppress ArgumentTypeCoercion */
+        $result = $this->walkAndFix($stmts, $issue->getLineFrom());
 
-        // "Type X for $var is always true" — unwrap the if body
-        if (str_contains($message, 'is always true') || str_contains($message, 'always truthy')) {
-            return $this->unwrapIfBody($stmts, $issue->getLineFrom());
+        return $result ?? FixResult::notFixed('Could not find if statement at target line');
+    }
+
+    #[\Override]
+    protected function tryFixIf(array &$stmts, int $index, If_ $if): ?FixResult {
+        $direction = $this->inferDirection($this->currentMessage, $if->cond);
+        if ($direction === self::DIR_TRUE) {
+            array_splice($stmts, $index, 1, $if->stmts);
+
+            return FixResult::fixed('Removed redundant always-true condition, kept body');
+        }
+        if ($direction === self::DIR_FALSE) {
+            $this->spliceDeadBranch($stmts, $index, $if);
+
+            return FixResult::fixed('Removed redundant always-false condition');
         }
 
-        // "Type X for $var is always false" — remove if body, keep else
-        if (str_contains($message, 'is always false') || str_contains($message, 'always falsy')) {
-            return $this->removeDeadBranch($stmts, $issue->getLineFrom());
+        // Compound `A && B && ...` — try stripping the tautological operand.
+        if ($if->cond instanceof BinaryOp\BooleanAnd) {
+            $newCond = $this->stripRedundantAndOperand($this->currentMessage, $if->cond);
+            if ($newCond !== null) {
+                $if->cond = $newCond;
+
+                return FixResult::fixed('Removed redundant operand from && chain');
+            }
         }
 
         return FixResult::notFixed('Cannot determine if condition is always true or false');
     }
 
     /**
-     * Remove always-false if branch, keep else.
-     *
-     * @param list<Node> $stmts
+     * @return self::DIR_*|null
      */
-    private function removeDeadBranch(array &$stmts, int $line): FixResult {
-        foreach ($stmts as $index => $stmt) {
-            if ($stmt instanceof If_ && $stmt->getStartLine() === $line) {
-                if ($stmt->else !== null) {
-                    array_splice($stmts, $index, 1, $stmt->else->stmts);
-                } elseif (count($stmt->elseifs) > 0) {
-                    $elseif = $stmt->elseifs[0];
-                    $newIf = new If_($elseif->cond, [
-                        'stmts' => $elseif->stmts,
-                        'elseifs' => array_slice($stmt->elseifs, 1),
-                        'else' => $stmt->else,
-                    ]);
-                    $stmts[$index] = $newIf;
-                } else {
-                    array_splice($stmts, $index, 1);
-                }
+    private function inferDirection(string $message, Node\Expr $cond): ?string {
+        if (str_contains($message, 'is always true') || str_contains($message, 'always truthy')) {
+            return self::DIR_TRUE;
+        }
+        if (str_contains($message, 'is always false') || str_contains($message, 'always falsy')) {
+            return self::DIR_FALSE;
+        }
 
-                return FixResult::fixed('Removed redundant always-false condition');
+        // Psalm phrases tautological / contradictory comparisons as "is never X" /
+        // "can never contain X" / "can never be X". For a comparison expression
+        // the direction follows from the operator:
+        //   $x !== Y / $x != Y  →  always true
+        //   $x === Y / $x == Y  →  always false
+        $isNeverPhrasing = str_contains($message, 'is never ')
+            || str_contains($message, 'can never contain ')
+            || str_contains($message, 'can never be ');
+        if ($isNeverPhrasing) {
+            if ($cond instanceof BinaryOp\NotIdentical || $cond instanceof BinaryOp\NotEqual) {
+                return self::DIR_TRUE;
             }
-
-            // Recurse into nested blocks
-            if ($stmt instanceof Node\Stmt\Namespace_ && $stmt->stmts !== null) {
-                $result = $this->removeDeadBranch($stmt->stmts, $line);
-                if ($result->isFixed()) {
-                    return $result;
-                }
-            }
-            if ($stmt instanceof Node\Stmt\ClassLike && is_array($stmt->stmts)) {
-                $result = $this->removeDeadBranch($stmt->stmts, $line);
-                if ($result->isFixed()) {
-                    return $result;
-                }
-            }
-            if (($stmt instanceof Node\Stmt\ClassMethod || $stmt instanceof Node\Stmt\Function_) && $stmt->stmts !== null) {
-                $result = $this->removeDeadBranch($stmt->stmts, $line);
-                if ($result->isFixed()) {
-                    return $result;
-                }
-            }
-            if ($stmt instanceof If_ || $stmt instanceof Node\Stmt\While_ || $stmt instanceof Node\Stmt\For_ || $stmt instanceof Node\Stmt\Foreach_) {
-                $result = $this->removeDeadBranch($stmt->stmts, $line);
-                if ($result->isFixed()) {
-                    return $result;
-                }
+            if ($cond instanceof BinaryOp\Identical || $cond instanceof BinaryOp\Equal) {
+                return self::DIR_FALSE;
             }
         }
 
-        return FixResult::notFixed('Could not find if statement at target line');
+        // AST-only fallback for literal conditions — works without any message
+        // text, so this branch is what makes the fixer baseline-compatible.
+        if ($cond instanceof ConstFetch) {
+            $name = strtolower($cond->name->toString());
+            if ($name === 'true') {
+                return self::DIR_TRUE;
+            }
+            if ($name === 'false') {
+                return self::DIR_FALSE;
+            }
+        }
+
+        return null;
+    }
+
+    private function stripRedundantAndOperand(string $message, BinaryOp\BooleanAnd $cond): ?Node\Expr {
+        $operands = $this->flattenAnd($cond);
+
+        $kept = [];
+        $removed = 0;
+        foreach ($operands as $operand) {
+            if ($this->isAlwaysTrueOperand($message, $operand)) {
+                $removed++;
+                continue;
+            }
+            $kept[] = $operand;
+        }
+
+        if ($removed === 0 || count($kept) === 0) {
+            return null;
+        }
+
+        return $this->buildAndChain($kept);
     }
 
     /**
-     * Replace if ($alwaysTrue) { body } with just body.
+     * Detects whether the operand is a tautological comparison made redundant by
+     * the message — `X !== null` / `X === null` when type is never-null,
+     * `X !== ''` / `X === ''` when type can never contain empty string.
      *
-     * @param list<Node> $stmts
+     * Only safe leaf comparisons; calls and other side-effectful expressions
+     * are left alone (== always considered "may have side effects").
      */
-    private function unwrapIfBody(array &$stmts, int $line): FixResult {
-        foreach ($stmts as $index => $stmt) {
-            if ($stmt instanceof If_ && $stmt->getStartLine() === $line) {
-                // Replace the if with its body statements
-                $body = $stmt->stmts;
-                array_splice($stmts, $index, 1, $body);
+    private function isAlwaysTrueOperand(string $message, Node\Expr $operand): bool {
+        $nullMessages = str_contains($message, 'is never null')
+            || str_contains($message, 'can never contain null')
+            || str_contains($message, 'can never be null');
+        if ($nullMessages && $this->isComparisonWithNull($operand)) {
+            return $operand instanceof BinaryOp\NotIdentical || $operand instanceof BinaryOp\NotEqual;
+        }
 
-                return FixResult::fixed('Removed redundant always-true condition, kept body');
-            }
+        $emptyStringMessages = str_contains($message, "'' can never contain ")
+            || str_contains($message, "can never be ''")
+            || str_contains($message, "can never contain ''");
+        if ($emptyStringMessages && $this->isComparisonWithEmptyString($operand)) {
+            return $operand instanceof BinaryOp\NotIdentical || $operand instanceof BinaryOp\NotEqual;
+        }
 
-            // Recurse into nested blocks
-            if ($stmt instanceof Node\Stmt\Namespace_ && $stmt->stmts !== null) {
-                $result = $this->unwrapIfBody($stmt->stmts, $line);
-                if ($result->isFixed()) {
-                    return $result;
-                }
-            }
-            if ($stmt instanceof Node\Stmt\ClassLike && is_array($stmt->stmts)) {
-                $result = $this->unwrapIfBody($stmt->stmts, $line);
-                if ($result->isFixed()) {
-                    return $result;
-                }
-            }
-            if (($stmt instanceof Node\Stmt\ClassMethod || $stmt instanceof Node\Stmt\Function_) && $stmt->stmts !== null) {
-                $result = $this->unwrapIfBody($stmt->stmts, $line);
-                if ($result->isFixed()) {
-                    return $result;
-                }
-            }
-            if ($stmt instanceof If_ || $stmt instanceof Node\Stmt\While_ || $stmt instanceof Node\Stmt\For_ || $stmt instanceof Node\Stmt\Foreach_) {
-                $result = $this->unwrapIfBody($stmt->stmts, $line);
-                if ($result->isFixed()) {
-                    return $result;
-                }
+        return false;
+    }
+
+    private function isComparisonWithNull(Node\Expr $cond): bool {
+        if (!($cond instanceof BinaryOp\Identical
+            || $cond instanceof BinaryOp\NotIdentical
+            || $cond instanceof BinaryOp\Equal
+            || $cond instanceof BinaryOp\NotEqual)) {
+            return false;
+        }
+        foreach ([$cond->left, $cond->right] as $side) {
+            if ($side instanceof ConstFetch && strtolower($side->name->toString()) === 'null') {
+                return true;
             }
         }
 
-        return FixResult::notFixed('Could not find if statement at target line');
+        return false;
+    }
+
+    private function isComparisonWithEmptyString(Node\Expr $cond): bool {
+        if (!($cond instanceof BinaryOp\Identical
+            || $cond instanceof BinaryOp\NotIdentical
+            || $cond instanceof BinaryOp\Equal
+            || $cond instanceof BinaryOp\NotEqual)) {
+            return false;
+        }
+        foreach ([$cond->left, $cond->right] as $side) {
+            if ($side instanceof Node\Scalar\String_ && $side->value === '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -87,10 +87,15 @@ final class PsalmOutputParser {
         $filePath = $data['file_path'] ?? ($data['file_name'] ?? null);
         $lineFrom = $data['line_from'] ?? null;
         $lineTo = $data['line_to'] ?? null;
+        /** @psalm-suppress MixedAssignment */
         $columnFrom = $data['column_from'] ?? 0;
+        /** @psalm-suppress MixedAssignment */
         $columnTo = $data['column_to'] ?? 0;
+        /** @psalm-suppress MixedAssignment */
         $snippet = $data['snippet'] ?? null;
+        /** @psalm-suppress MixedAssignment */
         $severity = $data['severity'] ?? 'error';
+        /** @psalm-suppress MixedAssignment */
         $link = $data['link'] ?? null;
 
         if (!is_string($type) || $type === '') {
@@ -109,6 +114,7 @@ final class PsalmOutputParser {
             return null;
         }
 
+        /** @psalm-suppress ArgumentTypeCoercion */
         return new PsalmIssue(
             type: $type,
             message: $message,

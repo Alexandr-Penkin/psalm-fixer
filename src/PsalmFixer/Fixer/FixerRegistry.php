@@ -73,6 +73,7 @@ final class FixerRegistry {
         $registry->register(new \PsalmFixer\Fixer\Mixed\MixedPropertyFetchFixer());
         $registry->register(new \PsalmFixer\Fixer\Mixed\MixedArrayAccessFixer());
         $registry->register(new \PsalmFixer\Fixer\TypeSafety\ArgumentTypeCoercionFixer());
+        $registry->register(new \PsalmFixer\Fixer\TypeSafety\PropertyTypeCoercionFixer());
 
         // Docblock fixers
         $registry->register(new \PsalmFixer\Fixer\Docblock\MismatchingDocblockPropertyTypeFixer());

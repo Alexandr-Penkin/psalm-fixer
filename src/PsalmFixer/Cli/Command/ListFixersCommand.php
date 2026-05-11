@@ -11,6 +11,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 final class ListFixersCommand extends Command {
+    #[\Override]
     protected function configure(): void {
         $this
             ->setName('list-fixers')
@@ -18,6 +19,7 @@ final class ListFixersCommand extends Command {
         ;
     }
 
+    #[\Override]
     protected function execute(InputInterface $input, OutputInterface $output): int {
         $registry = FixerRegistry::createDefault();
         $fixers = $registry->getAllFixers();

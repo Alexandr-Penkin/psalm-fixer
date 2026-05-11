@@ -132,29 +132,23 @@ final class MixedReturnStatementFixer extends AbstractFixer {
         $returnType = $func->returnType;
         if ($returnType instanceof Node\Identifier) {
             $name = $returnType->name;
-            if ($name !== '' && $name !== 'void' && $name !== 'never' && $name !== 'mixed') {
+            if ($name !== 'void' && $name !== 'never' && $name !== 'mixed') {
                 return $name;
             }
         }
         if ($returnType instanceof Node\Name) {
             $name = $returnType->toString();
-            if ($name !== '') {
-                return $name;
-            }
+            return $name;
         }
         if ($returnType instanceof Node\NullableType) {
             $inner = $returnType->type;
             if ($inner instanceof Node\Identifier) {
                 $name = $inner->name;
-                if ($name !== '') {
-                    return $name;
-                }
+                return $name;
             }
             if ($inner instanceof Node\Name) {
                 $name = $inner->toString();
-                if ($name !== '') {
-                    return $name;
-                }
+                return $name;
             }
         }
 
