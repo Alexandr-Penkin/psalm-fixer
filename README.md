@@ -78,11 +78,13 @@ After a run, psalm-fixer prints a summary grouped by:
 
 **NullSafety** — PossiblyNullReference, PossiblyNullPropertyFetch, PossiblyNullArgument, PossiblyNullArrayAccess
 
-**TypeSafety** — InvalidScalarArgument, RedundantCondition, TypeDoesNotContainNull, ArgumentTypeCoercion, PropertyTypeCoercion
+**TypeSafety** — InvalidScalarArgument, RedundantCondition, RedundantConditionGivenDocblockType, TypeDoesNotContainNull, DocblockTypeContradiction, ArgumentTypeCoercion, PropertyTypeCoercion
 
 **Mixed** — MixedArgument, MixedAssignment, MixedMethodCall, MixedReturnStatement, MixedPropertyFetch, MixedArrayAccess
 
 **Docblock** — MismatchingDocblockPropertyType, UnusedPsalmSuppress
+
+**Suppress-only** — LiteralKeyUnshapedArray, ReferenceConstraintViolation, MixedReturnTypeCoercion, UnsafeInstantiation, MixedArgumentTypeCoercion
 
 ## How it works
 
@@ -100,7 +102,9 @@ Fixes are applied bottom-up (descending line order) so earlier edits don't shift
 
 ### Fix strategies
 
-Most fixers either rewrite the AST directly (insert assert, unwrap if, drop redundant operand from `&&`, etc.) or fall back to attaching a `@psalm-suppress <Type>` annotation when no safe runtime rewrite exists. The suppress-fallback is used by `ArgumentTypeCoercionFixer`, `PropertyTypeCoercionFixer` and `MixedAssignmentFixer` for generic / template types and genuinely-mixed values where Psalm cannot infer a narrower type at the call site.
+Most fixers either rewrite the AST directly (insert assert, unwrap if, drop redundant operand from `&&`, etc.) or fall back to attaching a `@psalm-suppress <Type>` annotation when no safe runtime rewrite exists. The suppress-fallback is used by `ArgumentTypeCoercionFixer`, `PropertyTypeCoercionFixer`, `MixedAssignmentFixer`, and `LiteralKeyUnshapedArrayFixer` for generic / template types and genuinely-mixed values where Psalm cannot infer a narrower type at the call site. `TypeDoesNotContainNullFixer` and `RedundantConditionFixer` also fall back to suppress for docblock-contradiction reports (`DocblockTypeContradiction`, `RedundantConditionGivenDocblockType`) where no `if` exists at the target line — the docblock disagrees with the inferred runtime type and the contradiction can't be safely rewritten without knowing the author's intent.
+
+For mixed-typed arguments where Psalm expects a generic collection (`array<K, V>`, `list<T>`, `array{…}` shapes), the assert builder degrades to `assert(is_array($var))` — template arguments are lost but the assertion is still valid and lets Psalm rule out `mixed` at the call site.
 
 ## Adding a new fixer
 
@@ -126,7 +130,10 @@ vendor/bin/psalm
 
 ## Requirements
 
-- PHP >= 8.0
+- PHP >= 8.3
+- nikic/php-parser ^5.0
+- symfony/console ^6.0 | ^7.0
+- phpstan/phpdoc-parser ^1.0 | ^2.0
 - Psalm >= 6.15 (for JSON output generation)
 
 ## License
