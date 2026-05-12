@@ -195,6 +195,22 @@ final class PsalmBaselineParserTest extends TestCase {
         self::assertSame(2, $issues[0]->getLineFrom());
     }
 
+    public function testExactMatchBeatsSubstringMatch(): void {
+        // Line 2 contains the snippet as part of a larger expression;
+        // line 4 contains it exactly. The resolver should prefer line 4.
+        $this->writeFile('Foo.php', "<?php\n\$result = \$obj->method() + 1;\n\$other = 2;\n\$obj->method();\n");
+        $xml = $this->buildXml([
+            'Foo.php' => ['PossiblyNullReference' => ['$obj->method();']],
+        ]);
+
+        $issues = $this->parser->parseXml($xml, $this->tmpDir);
+
+        self::assertCount(1, $issues);
+        // Trimmed `$obj->method();` matches line 4 exactly. Line 2 is the
+        // substring-fallback, which should not win when an exact match exists.
+        self::assertSame(4, $issues[0]->getLineFrom());
+    }
+
     public function testParseSnippetWithLeadingIndentation(): void {
         $this->writeFile('Foo.php', "<?php\nclass Foo {\n    public function run(): void {\n        return \$obj->method();\n    }\n}\n");
         $xml = $this->buildXml([

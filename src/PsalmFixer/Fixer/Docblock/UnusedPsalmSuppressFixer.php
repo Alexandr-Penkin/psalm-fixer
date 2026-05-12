@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PsalmFixer\Fixer\Docblock;
 
+use PhpParser\Comment;
 use PhpParser\Comment\Doc;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
@@ -16,24 +17,29 @@ use PsalmFixer\Parser\PsalmIssue;
  * Removes unused @psalm-suppress annotations.
  * @psalm-suppress MixedReturnTypeCoercion
  */
-final class UnusedPsalmSuppressFixer extends AbstractFixer {
+final class UnusedPsalmSuppressFixer extends AbstractFixer
+{
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['UnusedPsalmSuppress'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'UnusedPsalmSuppressFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Removes unused @psalm-suppress annotations';
     }
 
     #[\Override]
-    public function canFix(PsalmIssue $issue, array $stmts): bool {
+    public function canFix(PsalmIssue $issue, array $stmts): bool
+    {
         $suppressedType = $this->extractSuppressedType($issue->getMessage());
         if ($suppressedType === null) {
             return false;
@@ -43,7 +49,8 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $suppressedType = $this->extractSuppressedType($issue->getMessage());
         if ($suppressedType === null) {
             return FixResult::notFixed('Could not extract suppressed issue type from message');
@@ -59,8 +66,12 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
             return FixResult::notFixed('Node has no docblock');
         }
 
-        /** @psalm-suppress ArgumentTypeCoercion */
-        $newDocText = $this->removeSuppressTag($doc->getText(), $suppressedType);
+        $docText = $doc->getText();
+        if ($docText === '') {
+            return FixResult::notFixed('Docblock is empty');
+        }
+
+        $newDocText = $this->removeSuppressTag($docText, $suppressedType);
         if ($newDocText === null) {
             return FixResult::notFixed('Could not find @psalm-suppress ' . $suppressedType . ' in docblock');
         }
@@ -81,7 +92,8 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
      * @param list<Node> $stmts
      * @param non-empty-string $suppressedType
      */
-    private function findNodeWithSuppress(array $stmts, int $line, string $suppressedType): ?Node {
+    private function findNodeWithSuppress(array $stmts, int $line, string $suppressedType): ?Node
+    {
         $found = null;
         $traverser = new NodeTraverser();
         $traverser->addVisitor(new class($line, $suppressedType, $found) extends NodeVisitorAbstract {
@@ -89,11 +101,11 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
                 private int $targetLine,
                 private string $suppressedType,
                 private ?Node &$found,
-            ) {
-            }
+            ) {}
 
             #[\Override]
-            public function enterNode(Node $node): ?int {
+            public function enterNode(Node $node): ?int
+            {
                 $doc = $node->getDocComment();
                 if ($doc === null) {
                     return null;
@@ -103,7 +115,7 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
                 $nodeStartLine = $node->getStartLine();
 
                 // Psalm may report the annotation line (inside docblock) or the statement line
-                $lineInRange = ($docStartLine <= $this->targetLine && $this->targetLine <= $nodeStartLine);
+                $lineInRange = $docStartLine <= $this->targetLine && $this->targetLine <= $nodeStartLine;
                 if (!$lineInRange) {
                     return null;
                 }
@@ -126,10 +138,9 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
      *
      * @return non-empty-string|null
      */
-    private function extractSuppressedType(string $message): ?string {
-        if (preg_match('/psalm-suppress\s+(\S+)/', $message, $matches) === 1
-            && $matches[1] !== ''
-        ) {
+    private function extractSuppressedType(string $message): ?string
+    {
+        if (preg_match('/psalm-suppress\s+(\S+)/', $message, $matches) === 1 && $matches[1] !== '') {
             return $matches[1];
         }
 
@@ -143,7 +154,8 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
      * @param non-empty-string $suppressedType
      * @return non-empty-string|null New docblock text, or null if tag not found
      */
-    private function removeSuppressTag(string $docText, string $suppressedType): ?string {
+    private function removeSuppressTag(string $docText, string $suppressedType): ?string
+    {
         $lines = explode("\n", $docText);
         $filteredLines = [];
         $removed = false;
@@ -172,7 +184,8 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
     /**
      * Check if a docblock contains only opening/closing markers and whitespace.
      */
-    private function isEmptyDocblock(string $docText): bool {
+    private function isEmptyDocblock(string $docText): bool
+    {
         $stripped = preg_replace('/\/\*\*|\*\/|\*|\s/', '', $docText);
 
         return $stripped === '';
@@ -183,7 +196,8 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
      *
      * @return list<\PhpParser\Comment>
      */
-    private function getCommentsWithoutDoc(Node $node): array {
+    private function getCommentsWithoutDoc(Node $node): array
+    {
         $result = [];
         $comments = $node->getAttribute('comments', []);
         if (!is_array($comments)) {
@@ -191,14 +205,11 @@ final class UnusedPsalmSuppressFixer extends AbstractFixer {
         }
         /** @psalm-suppress MixedAssignment */
         foreach ($comments as $comment) {
-            if (!($comment instanceof Doc)) {
+            if ($comment instanceof Comment && !$comment instanceof Doc) {
                 $result[] = $comment;
-                /** @psalm-suppress RedundantCondition */
-                assert(is_array($result));
             }
         }
 
-        /** @psalm-suppress MixedReturnTypeCoercion */
         return $result;
     }
 }

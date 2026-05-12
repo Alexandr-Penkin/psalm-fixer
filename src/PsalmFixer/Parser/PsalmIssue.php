@@ -7,9 +7,15 @@ namespace PsalmFixer\Parser;
 /**
  * Value object representing a single Psalm issue.
  *
+ * Part of the public API of the library — `findUnusedCode=true` flags some of
+ * its getters as unused because the bundled fixers don't read every field, but
+ * external consumers do (and have to, since the parser populates them).
+ *
  * @psalm-immutable
+ * @psalm-api
  */
-final class PsalmIssue {
+final class PsalmIssue
+{
     /**
      * @param non-empty-string $type
      * @param non-empty-string $message
@@ -33,56 +39,65 @@ final class PsalmIssue {
         private ?string $snippet,
         private string $severity,
         private ?string $link = null,
-    ) {
-    }
+    ) {}
 
     /** @return non-empty-string */
-    public function getType(): string {
+    public function getType(): string
+    {
         return $this->type;
     }
 
     /** @return non-empty-string */
-    public function getMessage(): string {
+    public function getMessage(): string
+    {
         return $this->message;
     }
 
     /** @return non-empty-string */
-    public function getFilePath(): string {
+    public function getFilePath(): string
+    {
         return $this->filePath;
     }
 
     /** @return positive-int */
-    public function getLineFrom(): int {
+    public function getLineFrom(): int
+    {
         return $this->lineFrom;
     }
 
     /** @return positive-int */
-    public function getLineTo(): int {
+    public function getLineTo(): int
+    {
         return $this->lineTo;
     }
 
     /** @return 0|positive-int */
-    public function getColumnFrom(): int {
+    public function getColumnFrom(): int
+    {
         return $this->columnFrom;
     }
 
     /** @return 0|positive-int */
-    public function getColumnTo(): int {
+    public function getColumnTo(): int
+    {
         return $this->columnTo;
     }
 
     /** @return non-empty-string|null */
-    public function getSnippet(): ?string {
+    public function getSnippet(): ?string
+    {
         return $this->snippet;
     }
 
     /** @return non-empty-string */
-    public function getSeverity(): string {
+    public function getSeverity(): string
+    {
         return $this->severity;
     }
 
     /** @return non-empty-string|null */
-    public function getLink(): ?string {
+    public function getLink(): ?string
+    {
         return $this->link;
     }
 }

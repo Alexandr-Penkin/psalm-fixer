@@ -10,7 +10,8 @@ use PsalmFixer\Parser\PsalmIssue;
 /**
  * Contract for all Psalm issue fixers.
  */
-interface FixerInterface {
+interface FixerInterface
+{
     /**
      * Returns Psalm issue types this fixer can handle.
      *

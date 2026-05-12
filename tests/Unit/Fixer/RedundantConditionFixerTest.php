@@ -157,6 +157,60 @@ final class RedundantConditionFixerTest extends TestCase {
         self::assertFalse($result->isFixed());
     }
 
+    public function testFallsBackToSuppressForDocblockGivenWithoutIf(): void {
+        // `RedundantConditionGivenDocblockType` raised on a non-if expression —
+        // e.g. an array access where the docblock claims a tighter type. No
+        // condition to rewrite, fall back to @psalm-suppress.
+        $code = "<?php\n\$name = \$fields['Status']['name'];\n";
+        $issue = new PsalmIssue(
+            type: 'RedundantConditionGivenDocblockType',
+            message: "Docblock-defined type array{name: string} for \$fields['Status'] is always array<array-key, mixed>",
+            filePath: '/tmp/t.php',
+            lineFrom: 2,
+            lineTo: 2,
+            columnFrom: 0,
+            columnTo: 0,
+            snippet: null,
+            severity: 'error',
+        );
+
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $stmts = $parser->parse($code);
+        self::assertNotNull($stmts);
+
+        $result = $this->fixer->fix($issue, $stmts);
+        self::assertTrue($result->isFixed(), 'Expected suppress fallback to succeed: ' . ($result->getDescription() ?? ''));
+
+        $output = $this->printer->prettyPrintFile($stmts);
+        self::assertStringContainsString('@psalm-suppress RedundantConditionGivenDocblockType', $output);
+        self::assertStringContainsString("\$fields['Status']['name']", $output);
+    }
+
+    public function testPlainRedundantConditionStillRefusesSuppressOnArbitraryStatement(): void {
+        // Plain RedundantCondition (not docblock-given) on a non-if, non-assert
+        // statement — fixer must still refuse to avoid attaching a suppress to
+        // whatever happens to be at the line.
+        $code = "<?php\n\$x = 1;\n";
+        $issue = new PsalmIssue(
+            type: 'RedundantCondition',
+            message: 'Some redundancy on a non-if',
+            filePath: '/tmp/t.php',
+            lineFrom: 2,
+            lineTo: 2,
+            columnFrom: 0,
+            columnTo: 0,
+            snippet: null,
+            severity: 'error',
+        );
+
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $stmts = $parser->parse($code);
+        self::assertNotNull($stmts);
+
+        $result = $this->fixer->fix($issue, $stmts);
+        self::assertFalse($result->isFixed());
+    }
+
     private function makeIssue(string $message, int $line): PsalmIssue {
         return new PsalmIssue(
             type: 'RedundantCondition',

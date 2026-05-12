@@ -14,24 +14,29 @@ use PsalmFixer\Parser\PsalmIssue;
 /**
  * Renames unused foreach value variable to $_.
  */
-final class UnusedForeachValueFixer extends AbstractFixer {
+final class UnusedForeachValueFixer extends AbstractFixer
+{
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['UnusedForeachValue'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'UnusedForeachValueFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Renames unused foreach value to $_';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $replaced = $this->replaceNodeAtLine($stmts, $issue->getLineFrom(), static function (Node $node): ?Node {
             if ($node instanceof Foreach_ && $node->valueVar instanceof Variable && is_string($node->valueVar->name)) {
                 $node->valueVar->name = '_';

@@ -4,53 +4,56 @@ declare(strict_types=1);
 
 namespace PsalmFixer\Fixer\Mixed;
 
-use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Expression;
 use PsalmFixer\Fixer\AbstractFixer;
+use PsalmFixer\Fixer\BuildsAssertExpression;
 use PsalmFixer\Fixer\FixResult;
 use PsalmFixer\Parser\PsalmIssue;
 
 /**
  * Adds assert(is_array($var)) before mixed array accesses.
  */
-final class MixedArrayAccessFixer extends AbstractFixer {
+final class MixedArrayAccessFixer extends AbstractFixer
+{
+    use BuildsAssertExpression;
+
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['MixedArrayAccess'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'MixedArrayAccessFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Adds assert(is_array()) before mixed array accesses';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
-        $varName = $this->extractVarName($issue->getMessage());
-        if ($varName === null) {
-            $varName = $this->extractVarName($issue->getSnippet() ?? '');
-        }
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
+        $varName = self::extractVarName($issue);
         if ($varName === null) {
             return FixResult::notFixed('Could not extract variable name');
         }
 
-        $assertExpr = new FuncCall(
-            new Name('is_array'),
-            [new Arg(new Variable($varName))],
-        );
+        $assertExpr = new FuncCall(new Name('is_array'), [new Arg(new Variable($varName))]);
 
-        $assertStmt = new Expression(
-            new FuncCall(new Name('assert'), [new Arg($assertExpr)]),
-        );
+        $assertStmt = new Expression($this->wrapInAssert($assertExpr));
+
+        if ($this->alreadyHasGuardBefore($stmts, $issue->getLineFrom(), $assertStmt)) {
+            return FixResult::notFixed("assert(is_array(\${$varName})) already present");
+        }
 
         $inserted = $this->insertStatementBefore($stmts, $issue->getLineFrom(), $assertStmt);
 
@@ -59,14 +62,5 @@ final class MixedArrayAccessFixer extends AbstractFixer {
         }
 
         return FixResult::notFixed('Could not insert assert statement');
-    }
-
-    /** @return non-empty-string|null */
-    private function extractVarName(string $message): ?string {
-        if (preg_match('/\$(\w+)/', $message, $matches) === 1 && $matches[1] !== '') {
-            return $matches[1];
-        }
-
-        return null;
     }
 }

@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace PsalmFixer\Report;
 
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Helper\Table;
 
 /**
  * Prints fix reports to console.
  */
-final class ReportPrinter {
-    public function print(FixReport $report, OutputInterface $output, bool $showDiff = false): void {
+final class ReportPrinter
+{
+    public function print(FixReport $report, OutputInterface $output, bool $showDiff = false): void
+    {
         $this->printFixed($report, $output);
         $this->printNotFixed($report, $output);
         $this->printSkipped($report, $output);
@@ -23,7 +24,8 @@ final class ReportPrinter {
         $this->printSummary($report, $output);
     }
 
-    private function printFixed(FixReport $report, OutputInterface $output): void {
+    private function printFixed(FixReport $report, OutputInterface $output): void
+    {
         $fixed = $report->getFixed();
         if (count($fixed) === 0) {
             return;
@@ -44,7 +46,8 @@ final class ReportPrinter {
         $output->writeln('');
     }
 
-    private function printNotFixed(FixReport $report, OutputInterface $output): void {
+    private function printNotFixed(FixReport $report, OutputInterface $output): void
+    {
         $notFixed = array_merge($report->getNotFixed(), $report->getNoFixer());
         if (count($notFixed) === 0) {
             return;
@@ -60,15 +63,13 @@ final class ReportPrinter {
                 $issue->getType(),
                 $issue->getMessage(),
             ));
-            $output->writeln(sprintf(
-                '    <fg=gray>Reason: %s</>',
-                $entry['reason'],
-            ));
+            $output->writeln(sprintf('    <fg=gray>Reason: %s</>', $entry['reason']));
         }
         $output->writeln('');
     }
 
-    private function printSkipped(FixReport $report, OutputInterface $output): void {
+    private function printSkipped(FixReport $report, OutputInterface $output): void
+    {
         $skipped = $report->getSkipped();
         if (count($skipped) === 0) {
             return;
@@ -81,7 +82,8 @@ final class ReportPrinter {
         $output->writeln('');
     }
 
-    private function printDiffs(FixReport $report, OutputInterface $output): void {
+    private function printDiffs(FixReport $report, OutputInterface $output): void
+    {
         $diffs = $report->getDiffs();
         if (count($diffs) === 0) {
             return;
@@ -103,7 +105,8 @@ final class ReportPrinter {
      * @param list<string> $oldLines
      * @param list<string> $newLines
      */
-    private function printUnifiedDiff(array $oldLines, array $newLines, OutputInterface $output): void {
+    private function printUnifiedDiff(array $oldLines, array $newLines, OutputInterface $output): void
+    {
         $maxLines = max(count($oldLines), count($newLines));
         $contextSize = 3;
         $inDiff = false;
@@ -154,7 +157,8 @@ final class ReportPrinter {
         }
     }
 
-    private function printSummary(FixReport $report, OutputInterface $output): void {
+    private function printSummary(FixReport $report, OutputInterface $output): void
+    {
         $output->writeln(sprintf(
             '<info>Summary:</info> %d fixed, %d not fixed, %d no fixer available, %d files skipped',
             $report->getFixedCount(),

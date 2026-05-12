@@ -9,14 +9,16 @@ use RuntimeException;
 /**
  * Parses Psalm JSON output into PsalmIssue objects.
  */
-final class PsalmOutputParser {
+final class PsalmOutputParser
+{
     /**
      * Parse JSON from a file path or '-' for STDIN.
      *
      * @param non-empty-string $source File path or '-' for STDIN
      * @return list<PsalmIssue>
      */
-    public function parse(string $source): array {
+    public function parse(string $source): array
+    {
         $json = $this->readSource($source);
 
         return $this->parseJson($json);
@@ -28,7 +30,8 @@ final class PsalmOutputParser {
      * @param non-empty-string $json
      * @return list<PsalmIssue>
      */
-    public function parseJson(string $json): array {
+    public function parseJson(string $json): array
+    {
         /** @var mixed $data */
         $data = json_decode($json, true);
 
@@ -43,7 +46,6 @@ final class PsalmOutputParser {
                 continue;
             }
 
-            /** @psalm-suppress MixedArgumentTypeCoercion */
             $issue = $this->parseIssue($item);
             if ($issue !== null) {
                 $result[] = $issue;
@@ -57,7 +59,8 @@ final class PsalmOutputParser {
      * @param non-empty-string $source
      * @return non-empty-string
      */
-    private function readSource(string $source): string {
+    private function readSource(string $source): string
+    {
         if ($source === '-') {
             $content = stream_get_contents(STDIN);
             if ($content === false || $content === '') {
@@ -80,12 +83,13 @@ final class PsalmOutputParser {
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param array<array-key, mixed> $data
      */
-    private function parseIssue(array $data): ?PsalmIssue {
+    private function parseIssue(array $data): ?PsalmIssue
+    {
         $type = $data['type'] ?? null;
         $message = $data['message'] ?? null;
-        $filePath = $data['file_path'] ?? ($data['file_name'] ?? null);
+        $filePath = $data['file_path'] ?? $data['file_name'] ?? null;
         $lineFrom = $data['line_from'] ?? null;
         $lineTo = $data['line_to'] ?? null;
         /** @psalm-suppress MixedAssignment */
@@ -122,8 +126,8 @@ final class PsalmOutputParser {
             filePath: $filePath,
             lineFrom: $lineFrom,
             lineTo: $lineTo,
-            columnFrom: is_int($columnFrom) ? $columnFrom : 0,
-            columnTo: is_int($columnTo) ? $columnTo : 0,
+            columnFrom: is_int($columnFrom) && $columnFrom >= 0 ? $columnFrom : 0,
+            columnTo: is_int($columnTo) && $columnTo >= 0 ? $columnTo : 0,
             snippet: is_string($snippet) && $snippet !== '' ? $snippet : null,
             severity: is_string($severity) && $severity !== '' ? $severity : 'error',
             link: is_string($link) && $link !== '' ? $link : null,

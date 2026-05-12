@@ -60,6 +60,62 @@ PHP;
         self::assertStringContainsString('foreach ($comments as $comment)', $output);
     }
 
+    public function testForeachAssertGoesInsideBodyWhenTypeKnown(): void {
+        // The iteration variable's type can be inferred from the function
+        // return type; the assert must live inside the foreach body so the
+        // variable is in scope when the assertion is evaluated.
+        $code = <<<'PHP'
+<?php
+function sum(array $items): int {
+    $total = 0;
+    foreach ($items as $item) {
+        $total += $item;
+    }
+    return $total;
+}
+PHP;
+        $issue = $this->makeIssue(4, 'expects int, $item is mixed');
+
+        $output = $this->runFixer($code, $issue);
+
+        // assert must appear inside the foreach body, before the body uses $item.
+        $foreachPos = strpos($output, 'foreach (');
+        $assertPos = strpos($output, 'assert(is_int($item))');
+        $usagePos = strpos($output, '$total += $item');
+
+        self::assertNotFalse($foreachPos);
+        self::assertNotFalse($assertPos, 'Expected assert inside foreach body');
+        self::assertNotFalse($usagePos);
+        self::assertGreaterThan($foreachPos, $assertPos);
+        self::assertLessThan($usagePos, $assertPos);
+    }
+
+    public function testAssertInsertionIsIdempotent(): void {
+        // Running the fixer twice on the same source with the same issue must
+        // not duplicate the assert.
+        $code = <<<'PHP'
+<?php
+function foo(array $data): int {
+    $value = $data['k'];
+    return $value;
+}
+PHP;
+        $issue = $this->makeIssue(3, 'Unable to determine the type that $value is being assigned to');
+
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $stmts = $parser->parse($code);
+        self::assertNotNull($stmts);
+
+        $first = $this->fixer->fix($issue, $stmts);
+        self::assertTrue($first->isFixed());
+
+        $second = $this->fixer->fix($issue, $stmts);
+        self::assertFalse($second->isFixed(), 'Second run must report not-fixed (guard already present)');
+
+        $output = $this->printer->prettyPrintFile($stmts);
+        self::assertSame(1, substr_count($output, 'assert(is_int($value))'));
+    }
+
     public function testSuppressMergesIntoExistingDocblock(): void {
         $code = "<?php\n/** @var int \$other */\n\$value = \$data['k'];\n";
         $issue = $this->makeIssue(3, 'Unable to determine the type that $value is being assigned to');

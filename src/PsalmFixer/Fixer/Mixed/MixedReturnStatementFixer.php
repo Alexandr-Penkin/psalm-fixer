@@ -5,48 +5,53 @@ declare(strict_types=1);
 namespace PsalmFixer\Fixer\Mixed;
 
 use PhpParser\Node;
-use PhpParser\Node\Arg;
-use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\Instanceof_;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Name;
-use PhpParser\Node\Stmt;
 use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\Return_;
-use PsalmFixer\Ast\NodeFinder;
 use PsalmFixer\Ast\TypeStringParser;
 use PsalmFixer\Fixer\AbstractFixer;
+use PsalmFixer\Fixer\BuildsAssertExpression;
 use PsalmFixer\Fixer\FixResult;
 use PsalmFixer\Parser\PsalmIssue;
 
 /**
  * Adds assert or cast before return statements with mixed values.
  */
-final class MixedReturnStatementFixer extends AbstractFixer {
+final class MixedReturnStatementFixer extends AbstractFixer
+{
+    use BuildsAssertExpression;
+
     private TypeStringParser $typeParser;
 
-    public function __construct() {
+    public function __construct()
+    {
         parent::__construct();
         $this->typeParser = new TypeStringParser();
     }
 
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['MixedReturnStatement'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'MixedReturnStatementFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Adds assert or cast before return with mixed values';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $expectedType = $this->typeParser->extractExpectedType($issue->getMessage());
 
         // Fallback: extract return type from containing method/function
@@ -65,15 +70,13 @@ final class MixedReturnStatementFixer extends AbstractFixer {
         }
 
         // For class types, add assert before return
-        $varName = $this->extractVarName($issue->getSnippet() ?? $issue->getMessage());
+        $varName = self::extractVarNameFromText($issue->getSnippet() ?? $issue->getMessage());
         if ($varName !== null && $this->typeParser->isClassType($expectedType)) {
-            $assertExpr = new Instanceof_(
-                new Variable($varName),
-                new Name\FullyQualified(ltrim($expectedType, '\\')),
-            );
-            $assertStmt = new Expression(
-                new FuncCall(new Name('assert'), [new Arg($assertExpr)]),
-            );
+            $assertExpr = new Instanceof_(new Variable($varName), new Name\FullyQualified(ltrim($expectedType, '\\')));
+            $assertStmt = new Expression($this->wrapInAssert($assertExpr));
+            if ($this->alreadyHasGuardBefore($stmts, $issue->getLineFrom(), $assertStmt)) {
+                return FixResult::notFixed("assert for \${$varName} already present before return");
+            }
             $inserted = $this->insertStatementBefore($stmts, $issue->getLineFrom(), $assertStmt);
             if ($inserted) {
                 return FixResult::fixed("Added assert before return for \${$varName}");
@@ -87,22 +90,17 @@ final class MixedReturnStatementFixer extends AbstractFixer {
      * @param list<Node> $stmts
      * @param non-empty-string $castType
      */
-    private function addCastToReturn(array &$stmts, int $line, string $castType): FixResult {
-        $castClass = match ($castType) {
-            'int' => Node\Expr\Cast\Int_::class,
-            'float' => Node\Expr\Cast\Double::class,
-            'string' => Node\Expr\Cast\String_::class,
-            'bool' => Node\Expr\Cast\Bool_::class,
-            'array' => Node\Expr\Cast\Array_::class,
-            default => null,
-        };
+    private function addCastToReturn(array &$stmts, int $line, string $castType): FixResult
+    {
+        $castClass = self::castClassFor($castType);
 
         if ($castClass === null) {
             return FixResult::notFixed("Unknown cast type: {$castType}");
         }
 
         $replaced = $this->replaceNodeAtLine($stmts, $line, static function (Node $node) use ($castClass): ?Node {
-            if ($node instanceof Return_ && $node->expr !== null) {
+            if ($node instanceof Return_ && $node->expr !== null && !$node->expr instanceof $castClass) {
+                /** @psalm-suppress UnsafeInstantiation */
                 $node->expr = new $castClass($node->expr);
                 return $node;
             }
@@ -123,7 +121,8 @@ final class MixedReturnStatementFixer extends AbstractFixer {
      * @param list<Node> $stmts
      * @return non-empty-string|null
      */
-    private function extractReturnTypeFromMethod(array $stmts, int $line): ?string {
+    private function extractReturnTypeFromMethod(array $stmts, int $line): ?string
+    {
         $func = $this->nodeFinder->findContainingFunction($stmts, $line);
         if ($func === null || $func->returnType === null) {
             return null;
@@ -137,26 +136,14 @@ final class MixedReturnStatementFixer extends AbstractFixer {
             }
         }
         if ($returnType instanceof Node\Name) {
-            $name = $returnType->toString();
-            return $name;
+            return $returnType->toString();
         }
         if ($returnType instanceof Node\NullableType) {
             $inner = $returnType->type;
             if ($inner instanceof Node\Identifier) {
-                $name = $inner->name;
-                return $name;
+                return $inner->name;
             }
-            $name = $inner->toString();
-            return $name;
-        }
-
-        return null;
-    }
-
-    /** @return non-empty-string|null */
-    private function extractVarName(string $text): ?string {
-        if (preg_match('/\$(\w+)/', $text, $matches) === 1 && $matches[1] !== '') {
-            return $matches[1];
+            return $inner->toString();
         }
 
         return null;

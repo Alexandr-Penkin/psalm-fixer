@@ -7,14 +7,16 @@ namespace PsalmFixer\Fixer;
 /**
  * Registry mapping Psalm issue types to their fixers.
  */
-final class FixerRegistry {
+final class FixerRegistry
+{
     /** @var array<non-empty-string, list<FixerInterface>> */
     private array $fixersByType = [];
 
     /** @var list<FixerInterface> */
     private array $allFixers = [];
 
-    public function register(FixerInterface $fixer): void {
+    public function register(FixerInterface $fixer): void
+    {
         $this->allFixers[] = $fixer;
         foreach ($fixer->getSupportedTypes() as $type) {
             if (!array_key_exists($type, $this->fixersByType)) {
@@ -28,24 +30,28 @@ final class FixerRegistry {
      * @param non-empty-string $issueType
      * @return list<FixerInterface>
      */
-    public function getFixersForType(string $issueType): array {
+    public function getFixersForType(string $issueType): array
+    {
         return $this->fixersByType[$issueType] ?? [];
     }
 
     /** @return list<FixerInterface> */
-    public function getAllFixers(): array {
+    public function getAllFixers(): array
+    {
         return $this->allFixers;
     }
 
     /** @return list<non-empty-string> */
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return array_keys($this->fixersByType);
     }
 
     /**
      * Create registry with all built-in fixers.
      */
-    public static function createDefault(): self {
+    public static function createDefault(): self
+    {
         $registry = new self();
 
         // Phase 2 — Simple fixers
@@ -75,6 +81,7 @@ final class FixerRegistry {
         $registry->register(new \PsalmFixer\Fixer\TypeSafety\ArgumentTypeCoercionFixer());
         $registry->register(new \PsalmFixer\Fixer\TypeSafety\PropertyTypeCoercionFixer());
         $registry->register(new \PsalmFixer\Fixer\Suppress\SuppressFallbackFixer());
+        $registry->register(new \PsalmFixer\Fixer\Suppress\LiteralKeyUnshapedArrayFixer());
         $registry->register(new \PsalmFixer\Fixer\Purity\MissingPureAnnotationFixer());
 
         // Docblock fixers

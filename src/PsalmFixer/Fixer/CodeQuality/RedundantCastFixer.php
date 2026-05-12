@@ -14,24 +14,29 @@ use PsalmFixer\Parser\PsalmIssue;
  * Removes redundant type casts.
  * e.g., (int)$alreadyInt → $alreadyInt
  */
-final class RedundantCastFixer extends AbstractFixer {
+final class RedundantCastFixer extends AbstractFixer
+{
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['RedundantCast', 'RedundantCastGivenDocblockType'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'RedundantCastFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Removes redundant type casts where variable is already the target type';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $replaced = $this->replaceNodeAtLine($stmts, $issue->getLineFrom(), static function (Node $node): ?Node {
             if ($node instanceof Cast) {
                 return $node->expr;

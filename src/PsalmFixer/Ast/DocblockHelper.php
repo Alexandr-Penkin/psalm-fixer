@@ -6,24 +6,27 @@ namespace PsalmFixer\Ast;
 
 use PhpParser\Comment\Doc;
 use PhpParser\Node;
+use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocNode;
 use PHPStan\PhpDocParser\Lexer\Lexer;
 use PHPStan\PhpDocParser\Parser\ConstExprParser;
 use PHPStan\PhpDocParser\Parser\PhpDocParser;
 use PHPStan\PhpDocParser\Parser\TokenIterator;
 use PHPStan\PhpDocParser\Parser\TypeParser;
 use PHPStan\PhpDocParser\ParserConfig;
-use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocNode;
-use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagNode;
-use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagValueNode;
 
 /**
  * Helper for reading and manipulating PHPDoc blocks.
+ *
+ * @psalm-api Public API for fixers — not all methods are used by the bundled
+ * set, but they're part of the contract for third-party fixer authors.
  */
-final class DocblockHelper {
+final class DocblockHelper
+{
     private Lexer $lexer;
     private PhpDocParser $parser;
 
-    public function __construct() {
+    public function __construct()
+    {
         $config = new ParserConfig([]);
         $this->lexer = new Lexer($config);
         $constExprParser = new ConstExprParser($config);
@@ -34,7 +37,8 @@ final class DocblockHelper {
     /**
      * Parse a PHPDoc comment into an AST node.
      */
-    public function parse(string $docComment): PhpDocNode {
+    public function parse(string $docComment): PhpDocNode
+    {
         $tokens = $this->lexer->tokenize($docComment);
         $tokenIterator = new TokenIterator($tokens);
 
@@ -44,14 +48,16 @@ final class DocblockHelper {
     /**
      * Get the PHPDoc comment from a node.
      */
-    public function getDocComment(Node $node): ?Doc {
+    public function getDocComment(Node $node): ?Doc
+    {
         return $node->getDocComment();
     }
 
     /**
      * Set or replace the PHPDoc comment on a node.
      */
-    public function setDocComment(Node $node, string $docText): void {
+    public function setDocComment(Node $node, string $docText): void
+    {
         $node->setDocComment(new Doc($docText));
     }
 
@@ -61,16 +67,13 @@ final class DocblockHelper {
      * @param non-empty-string $tagName e.g. '@param', '@return'
      * @param non-empty-string $tagValue e.g. 'int $foo'
      */
-    public function addTag(Node $node, string $tagName, string $tagValue): void {
+    public function addTag(Node $node, string $tagName, string $tagValue): void
+    {
         $doc = $node->getDocComment();
         if ($doc !== null) {
             $text = $doc->getText();
             // Insert before closing */
-            $newText = preg_replace(
-                '/\s*\*\/\s*$/',
-                "\n * {$tagName} {$tagValue}\n */",
-                $text,
-            );
+            $newText = preg_replace('/\s*\*\/\s*$/', "\n * {$tagName} {$tagValue}\n */", $text);
             if (is_string($newText)) {
                 $node->setDocComment(new Doc($newText));
             }
@@ -84,7 +87,8 @@ final class DocblockHelper {
      *
      * @param non-empty-string $tagName e.g. '@param', '@return', '@template'
      */
-    public function hasTag(Node $node, string $tagName): bool {
+    public function hasTag(Node $node, string $tagName): bool
+    {
         $doc = $node->getDocComment();
         if ($doc === null) {
             return false;
@@ -105,7 +109,8 @@ final class DocblockHelper {
      *
      * @param non-empty-string $tagName
      */
-    public function removeTag(Node $node, string $tagName): void {
+    public function removeTag(Node $node, string $tagName): void
+    {
         $doc = $node->getDocComment();
         if ($doc === null) {
             return;

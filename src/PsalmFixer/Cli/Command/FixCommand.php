@@ -15,24 +15,31 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
-final class FixCommand extends Command {
+final class FixCommand extends Command
+{
     #[\Override]
-    protected function configure(): void {
+    protected function configure(): void
+    {
         $this
             ->setName('fix')
             ->setDescription('Fix Psalm issues from JSON output or a Psalm baseline XML file')
             ->addArgument('source', InputArgument::OPTIONAL, 'Path to Psalm JSON output file, or "-" for STDIN')
-            ->addOption('baseline', null, InputOption::VALUE_REQUIRED, 'Path to Psalm baseline XML file (mutually exclusive with the source argument)')
+            ->addOption(
+                'baseline',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Path to Psalm baseline XML file (mutually exclusive with the source argument)',
+            )
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Show what would be fixed without modifying files')
             ->addOption('diff', null, InputOption::VALUE_NONE, 'Show diff of changes (implies --dry-run)')
             ->addOption('backup', null, InputOption::VALUE_NONE, 'Create .bak files before modifying')
             ->addOption('issue-type', null, InputOption::VALUE_REQUIRED, 'Comma-separated list of issue types to fix')
-            ->addOption('file', null, InputOption::VALUE_REQUIRED, 'Comma-separated list of file patterns to filter')
-        ;
+            ->addOption('file', null, InputOption::VALUE_REQUIRED, 'Comma-separated list of file patterns to filter');
     }
 
     #[\Override]
-    protected function execute(InputInterface $input, OutputInterface $output): int {
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
         /** @var string|null $source */
         $source = $input->getArgument('source');
         /** @var string|null $baseline */
@@ -59,16 +66,14 @@ final class FixCommand extends Command {
         /** @var string|null $fileRaw */
         $fileRaw = $input->getOption('file');
 
-        /** @var list<non-empty-string>|null $issueTypeFilter */
         $issueTypeFilter = null;
         if (is_string($issueTypeRaw) && $issueTypeRaw !== '') {
-            $issueTypeFilter = array_filter(explode(',', $issueTypeRaw), static fn(string $s): bool => $s !== '');
+            $issueTypeFilter = $this->splitNonEmpty($issueTypeRaw);
         }
 
-        /** @var list<non-empty-string>|null $fileFilter */
         $fileFilter = null;
         if (is_string($fileRaw) && $fileRaw !== '') {
-            $fileFilter = array_filter(explode(',', $fileRaw), static fn(string $s): bool => $s !== '');
+            $fileFilter = $this->splitNonEmpty($fileRaw);
         }
 
         $registry = FixerRegistry::createDefault();
@@ -76,7 +81,6 @@ final class FixCommand extends Command {
         $printer = new ReportPrinter();
 
         if ($hasBaseline) {
-            /** @var non-empty-string $baseline */
             $baselineParser = new PsalmBaselineParser();
             try {
                 $issues = $baselineParser->parse($baseline);
@@ -95,7 +99,6 @@ final class FixCommand extends Command {
 
             $output->writeln(sprintf('Parsed <info>%d</info> issues from Psalm baseline.', count($issues)));
         } else {
-            /** @var non-empty-string $source */
             $jsonParser = new PsalmOutputParser();
             try {
                 $issues = $jsonParser->parse($source);
@@ -116,10 +119,24 @@ final class FixCommand extends Command {
             $output->writeln('<comment>Dry run mode — no files will be modified.</comment>');
         }
 
-        /** @psalm-suppress ArgumentTypeCoercion */
         $report = $processor->processIssues($issues, $dryRun, $issueTypeFilter, $fileFilter, $backup);
         $printer->print($report, $output, $showDiff);
 
         return $report->getFixedCount() > 0 ? Command::SUCCESS : Command::FAILURE;
+    }
+
+    /**
+     * @return list<non-empty-string>
+     */
+    private function splitNonEmpty(string $raw): array
+    {
+        $result = [];
+        foreach (explode(',', $raw) as $part) {
+            if ($part !== '') {
+                $result[] = $part;
+            }
+        }
+
+        return $result;
     }
 }

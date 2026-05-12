@@ -18,16 +18,17 @@ use PsalmFixer\Parser\PsalmIssue;
 
 /**
  * Removes redundant conditions: always-true → unwrap body, always-false → keep else.
- * 
+ *
  * Direction is taken from the Psalm message when available; otherwise from the
  * if-condition AST (literal true / false). The AST fallback lets the fixer work
  * with baseline input that carries no message text.
- * 
+ *
  * For compound `&&` chains, also strips an individual redundant operand without
  * unwrapping the whole if.
  * @psalm-suppress MixedReturnTypeCoercion
  */
-final class RedundantConditionFixer extends AbstractIfWalkingFixer {
+final class RedundantConditionFixer extends AbstractIfWalkingFixer
+{
     use AppendsPsalmSuppress;
 
     private const DIR_TRUE = 'true';
@@ -36,26 +37,33 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
     private string $currentMessage = '';
 
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['RedundantCondition', 'RedundantConditionGivenDocblockType'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'RedundantConditionFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Removes redundant always-true/false conditions';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $this->currentMessage = $issue->getMessage();
-        /** @psalm-suppress ArgumentTypeCoercion */
+        /**
+         * @psalm-suppress ArgumentTypeCoercion
+         * @mago-expect analysis:less-specific-argument
+         */
         $result = $this->walkAndFix($stmts, $issue->getLineFrom());
-        if ($result !== null) {
+        if ($result !== null && $result->isFixed()) {
             return $result;
         }
 
@@ -69,7 +77,17 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
             return $this->attachPsalmSuppress($stmts, $issue->getLineFrom(), $issue->getType());
         }
 
-        return FixResult::notFixed('No if or assert statement at target line');
+        // For docblock-contradiction reports, Psalm has determined the runtime
+        // type is broader than the docblock claims (e.g. "type array{name: string}
+        // is always array<array-key, mixed>"). The condition can't be safely
+        // rewritten without knowing the author's intent (was the docblock
+        // optimistic, or is the real type wrong?), so attach a suppress to the
+        // covering statement.
+        if ($issue->getType() === 'RedundantConditionGivenDocblockType') {
+            return $this->attachPsalmSuppress($stmts, $issue->getLineFrom(), $issue->getType());
+        }
+
+        return $result ?? FixResult::notFixed('No if or assert statement at target line');
     }
 
     /**
@@ -78,9 +96,11 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
      *
      * @param iterable<Node> $stmts
      */
-    private function lineCarriesAssertCall(iterable $stmts, int $line): bool {
+    private function lineCarriesAssertCall(iterable $stmts, int $line): bool
+    {
         foreach ($stmts as $stmt) {
-            if ($stmt instanceof Expression
+            if (
+                $stmt instanceof Expression
                 && $stmt->getStartLine() === $line
                 && $stmt->expr instanceof FuncCall
                 && $stmt->expr->name instanceof Node\Name
@@ -106,9 +126,10 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
      * than `list<Node\Stmt>` because ClassLike/ClassMethod $stmts are typed
      * as arrays by the stubs.
      *
-     * @return array<int, Node\Stmt>|null
+     * @return array<array-key, Node\Stmt>|null
      */
-    private function nestedStmtsOf(Node $stmt): ?array {
+    private function nestedStmtsOf(Node $stmt): ?array
+    {
         if ($stmt instanceof Node\Stmt\Namespace_) {
             return $stmt->stmts;
         }
@@ -120,7 +141,12 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
             /** @psalm-suppress MixedReturnTypeCoercion */
             return $stmt->stmts;
         }
-        if ($stmt instanceof If_ || $stmt instanceof Node\Stmt\While_ || $stmt instanceof Node\Stmt\For_ || $stmt instanceof Node\Stmt\Foreach_) {
+        if (
+            $stmt instanceof If_
+            || $stmt instanceof Node\Stmt\While_
+            || $stmt instanceof Node\Stmt\For_
+            || $stmt instanceof Node\Stmt\Foreach_
+        ) {
             return $stmt->stmts;
         }
 
@@ -128,7 +154,8 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
     }
 
     #[\Override]
-    protected function tryFixIf(array &$stmts, int $index, If_ $if): ?FixResult {
+    protected function tryFixIf(array &$stmts, int $index, If_ $if): ?FixResult
+    {
         $direction = $this->inferDirection($this->currentMessage, $if->cond);
         if ($direction === self::DIR_TRUE) {
             array_splice($stmts, $index, 1, $if->stmts);
@@ -157,7 +184,8 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
     /**
      * @return self::DIR_*|null
      */
-    private function inferDirection(string $message, Node\Expr $cond): ?string {
+    private function inferDirection(string $message, Node\Expr $cond): ?string
+    {
         if (str_contains($message, 'is always true') || str_contains($message, 'always truthy')) {
             return self::DIR_TRUE;
         }
@@ -170,7 +198,8 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
         // the direction follows from the operator:
         //   $x !== Y / $x != Y  →  always true
         //   $x === Y / $x == Y  →  always false
-        $isNeverPhrasing = str_contains($message, 'is never ')
+        $isNeverPhrasing =
+            str_contains($message, 'is never ')
             || str_contains($message, 'can never contain ')
             || str_contains($message, 'can never be ');
         if ($isNeverPhrasing) {
@@ -205,7 +234,8 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
         return null;
     }
 
-    private function stripRedundantAndOperand(string $message, BinaryOp\BooleanAnd $cond): ?Node\Expr {
+    private function stripRedundantAndOperand(string $message, BinaryOp\BooleanAnd $cond): ?Node\Expr
+    {
         $operands = $this->flattenAnd($cond);
 
         $kept = [];
@@ -233,15 +263,18 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
      * Only safe leaf comparisons; calls and other side-effectful expressions
      * are left alone (== always considered "may have side effects").
      */
-    private function isAlwaysTrueOperand(string $message, Node\Expr $operand): bool {
-        $nullMessages = str_contains($message, 'is never null')
+    private function isAlwaysTrueOperand(string $message, Node\Expr $operand): bool
+    {
+        $nullMessages =
+            str_contains($message, 'is never null')
             || str_contains($message, 'can never contain null')
             || str_contains($message, 'can never be null');
         if ($nullMessages && $this->isComparisonWithNull($operand)) {
             return $operand instanceof BinaryOp\NotIdentical || $operand instanceof BinaryOp\NotEqual;
         }
 
-        $emptyStringMessages = str_contains($message, "'' can never contain ")
+        $emptyStringMessages =
+            str_contains($message, "'' can never contain ")
             || str_contains($message, "can never be ''")
             || str_contains($message, "can never contain ''");
         if ($emptyStringMessages && $this->isComparisonWithEmptyString($operand)) {
@@ -251,11 +284,16 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
         return false;
     }
 
-    private function isComparisonWithNull(Node\Expr $cond): bool {
-        if (!($cond instanceof BinaryOp\Identical
-            || $cond instanceof BinaryOp\NotIdentical
-            || $cond instanceof BinaryOp\Equal
-            || $cond instanceof BinaryOp\NotEqual)) {
+    private function isComparisonWithNull(Node\Expr $cond): bool
+    {
+        if (
+            !(
+                $cond instanceof BinaryOp\Identical
+                || $cond instanceof BinaryOp\NotIdentical
+                || $cond instanceof BinaryOp\Equal
+                || $cond instanceof BinaryOp\NotEqual
+            )
+        ) {
             return false;
         }
         foreach ([$cond->left, $cond->right] as $side) {
@@ -267,11 +305,16 @@ final class RedundantConditionFixer extends AbstractIfWalkingFixer {
         return false;
     }
 
-    private function isComparisonWithEmptyString(Node\Expr $cond): bool {
-        if (!($cond instanceof BinaryOp\Identical
-            || $cond instanceof BinaryOp\NotIdentical
-            || $cond instanceof BinaryOp\Equal
-            || $cond instanceof BinaryOp\NotEqual)) {
+    private function isComparisonWithEmptyString(Node\Expr $cond): bool
+    {
+        if (
+            !(
+                $cond instanceof BinaryOp\Identical
+                || $cond instanceof BinaryOp\NotIdentical
+                || $cond instanceof BinaryOp\Equal
+                || $cond instanceof BinaryOp\NotEqual
+            )
+        ) {
             return false;
         }
         foreach ([$cond->left, $cond->right] as $side) {

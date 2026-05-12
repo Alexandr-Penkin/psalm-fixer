@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace PsalmFixer\Ast;
 
-use PhpParser\Node\ComplexType;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\NullableType;
@@ -12,8 +11,11 @@ use PhpParser\Node\UnionType;
 
 /**
  * Converts Psalm type strings into PHP AST type nodes.
+ *
+ * @psalm-api Public helper for fixer implementations.
  */
-final class TypeStringParser {
+final class TypeStringParser
+{
     /**
      * Regex pattern for matching Psalm type strings including generics.
      * Matches: int, string, array<array-key, mixed>, Foo\Bar, list<string>, non-empty-string, etc.
@@ -62,7 +64,8 @@ final class TypeStringParser {
      *
      * @param non-empty-string $type
      */
-    public function isScalarType(string $type): bool {
+    public function isScalarType(string $type): bool
+    {
         return array_key_exists(strtolower($type), self::SCALAR_CASTS);
     }
 
@@ -72,7 +75,8 @@ final class TypeStringParser {
      * @param non-empty-string $type
      * @return non-empty-string|null
      */
-    public function getCastType(string $type): ?string {
+    public function getCastType(string $type): ?string
+    {
         return self::SCALAR_CASTS[strtolower($type)] ?? null;
     }
 
@@ -82,8 +86,44 @@ final class TypeStringParser {
      * @param non-empty-string $type
      * @return non-empty-string|null
      */
-    public function getIsTypeFunction(string $type): ?string {
+    public function getIsTypeFunction(string $type): ?string
+    {
         return self::IS_TYPE_FUNCTIONS[strtolower($type)] ?? null;
+    }
+
+    /**
+     * For generic collection types (`array<...>`, `list<...>`, `non-empty-array<...>`,
+     * `non-empty-list<...>`, `iterable<...>`, `array{...}`), return the base PHP
+     * type (currently `'array'`) so callers can emit a runtime check that drops
+     * the parameter info but is still useful (e.g. `is_array($x)`). Returns null
+     * for non-generic / non-array types.
+     *
+     * @param non-empty-string $type
+     * @return 'array'|null
+     */
+    public function getDegradedArrayType(string $type): ?string
+    {
+        $trimmed = trim($type);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        // array{...} shape syntax → still an array at runtime.
+        if (str_starts_with($trimmed, 'array{')) {
+            return 'array';
+        }
+
+        if (preg_match('/^(array|list|non-empty-array|non-empty-list|iterable)\b/i', $trimmed, $matches) === 1) {
+            $base = strtolower($matches[1]);
+            // iterable<...> covers Traversable too — degrade is not safe, skip.
+            if ($base === 'iterable') {
+                return null;
+            }
+
+            return 'array';
+        }
+
+        return null;
     }
 
     /**
@@ -91,13 +131,16 @@ final class TypeStringParser {
      *
      * @param non-empty-string $type
      */
-    public function isClassType(string $type): bool {
+    public function isClassType(string $type): bool
+    {
         $lower = strtolower($type);
 
-        return !array_key_exists($lower, self::SCALAR_CASTS)
+        return (
+            !array_key_exists($lower, self::SCALAR_CASTS)
             && !array_key_exists($lower, self::IS_TYPE_FUNCTIONS)
             && !in_array($lower, ['void', 'never', 'mixed', 'self', 'static', 'parent', 'iterable', 'resource'], true)
-            && preg_match('/^[A-Za-z_\\\\][A-Za-z0-9_\\\\]*$/', $type) === 1;
+            && preg_match('/^[A-Za-z_\\\\][A-Za-z0-9_\\\\]*$/', $type) === 1
+        );
     }
 
     /**
@@ -107,7 +150,8 @@ final class TypeStringParser {
      * @param non-empty-string $typeString
      * @return Identifier|Name|NullableType|UnionType|null
      */
-    public function parseType(string $typeString): Identifier|Name|NullableType|UnionType|null {
+    public function parseType(string $typeString): Identifier|Name|NullableType|UnionType|null
+    {
         $typeString = trim($typeString);
 
         // Nullable
@@ -141,16 +185,31 @@ final class TypeStringParser {
     /**
      * @return Identifier|Name|null
      */
-    private function parseSimpleType(string $type): Identifier|Name|null {
+    private function parseSimpleType(string $type): Identifier|Name|null
+    {
         $type = trim($type);
         if ($type === '') {
             return null;
         }
 
         $builtins = [
-            'int', 'float', 'string', 'bool', 'array', 'object',
-            'void', 'never', 'null', 'false', 'true', 'mixed',
-            'iterable', 'callable', 'self', 'static', 'parent',
+            'int',
+            'float',
+            'string',
+            'bool',
+            'array',
+            'object',
+            'void',
+            'never',
+            'null',
+            'false',
+            'true',
+            'mixed',
+            'iterable',
+            'callable',
+            'self',
+            'static',
+            'parent',
         ];
 
         if (in_array(strtolower($type), $builtins, true)) {
@@ -177,7 +236,8 @@ final class TypeStringParser {
      *
      * @return non-empty-string|null
      */
-    public function extractExpectedType(string $message): ?string {
+    public function extractExpectedType(string $message): ?string
+    {
         /** @var list<non-empty-string> $patterns */
         $patterns = [
             // "expects TYPE," or "expects TYPE but" — with generic support
@@ -207,7 +267,8 @@ final class TypeStringParser {
      *
      * @return non-empty-string|null
      */
-    public function extractProvidedType(string $message): ?string {
+    public function extractProvidedType(string $message): ?string
+    {
         // "TYPE provided" or "TYPE given"
         if (preg_match('/\b(' . self::TYPE_PATTERN . ')\s+(?:provided|given)/i', $message, $matches) === 1) {
             $type = $matches[1];

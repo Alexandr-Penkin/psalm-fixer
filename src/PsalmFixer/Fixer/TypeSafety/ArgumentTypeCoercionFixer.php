@@ -35,33 +35,39 @@ use PsalmFixer\Parser\PsalmIssue;
  * otherwise from the AST: the message's `Argument N` index points at the Nth
  * argument of the call located at the issue line.
  */
-final class ArgumentTypeCoercionFixer extends AbstractFixer {
+final class ArgumentTypeCoercionFixer extends AbstractFixer
+{
     use AppendsPsalmSuppress;
 
     private TypeStringParser $typeParser;
 
-    public function __construct() {
+    public function __construct()
+    {
         parent::__construct();
         $this->typeParser = new TypeStringParser();
     }
 
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['ArgumentTypeCoercion'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'ArgumentTypeCoercionFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Adds assert($var instanceof Type) for type coercion, with @psalm-suppress fallback';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $message = $issue->getMessage();
         $expectedType = $this->typeParser->extractExpectedType($message);
         $varName = $this->resolveVarName($stmts, $issue, $message);
@@ -81,44 +87,26 @@ final class ArgumentTypeCoercionFixer extends AbstractFixer {
      * @param non-empty-string $expectedType
      * @param non-empty-string $varName
      */
-    private function tryAddAssert(array &$stmts, PsalmIssue $issue, string $expectedType, string $varName): ?FixResult {
+    private function tryAddAssert(array &$stmts, PsalmIssue $issue, string $expectedType, string $varName): ?FixResult
+    {
         $isFunc = $this->typeParser->getIsTypeFunction($expectedType);
         if ($isFunc !== null) {
-            return $this->insertAssert(
-                $stmts,
-                $issue,
-                new FuncCall(new Name($isFunc), [new Arg(new Variable($varName))]),
-                "assert({$isFunc}(\${$varName}))",
-            );
+            return $this->insertAssert($stmts, $issue, new FuncCall(new Name($isFunc), [new Arg(
+                new Variable($varName),
+            )]), "assert({$isFunc}(\${$varName}))");
         }
 
         if ($this->typeParser->isClassType($expectedType)) {
             $className = ltrim($expectedType, '\\');
-            $instanceof = new Instanceof_(
-                new Variable($varName),
-                new Name\FullyQualified($className),
-            );
+            $instanceof = new Instanceof_(new Variable($varName), new Name\FullyQualified($className));
 
-            return $this->insertAssert(
-                $stmts,
-                $issue,
-                $instanceof,
-                "assert(\${$varName} instanceof \\{$className})",
-            );
+            return $this->insertAssert($stmts, $issue, $instanceof, "assert(\${$varName} instanceof \\{$className})");
         }
 
         if (strtolower($expectedType) === 'non-empty-string') {
-            $check = new BinaryOp\NotIdentical(
-                new Variable($varName),
-                new String_(''),
-            );
+            $check = new BinaryOp\NotIdentical(new Variable($varName), new String_(''));
 
-            return $this->insertAssert(
-                $stmts,
-                $issue,
-                $check,
-                "assert(\${$varName} !== '')",
-            );
+            return $this->insertAssert($stmts, $issue, $check, "assert(\${$varName} !== '')");
         }
 
         return null;
@@ -132,7 +120,8 @@ final class ArgumentTypeCoercionFixer extends AbstractFixer {
      * @param list<Node> $stmts
      * @return non-empty-string|null
      */
-    private function resolveVarName(array $stmts, PsalmIssue $issue, string $message): ?string {
+    private function resolveVarName(array $stmts, PsalmIssue $issue, string $message): ?string
+    {
         if (preg_match('/\$(\w+)/', $message, $matches) === 1 && $matches[1] !== '') {
             return $matches[1];
         }
@@ -147,7 +136,8 @@ final class ArgumentTypeCoercionFixer extends AbstractFixer {
             return null;
         }
 
-        $args = $call instanceof Node\Expr\MethodCall
+        $args =
+            $call instanceof Node\Expr\MethodCall
             || $call instanceof Node\Expr\StaticCall
             || $call instanceof Node\Expr\FuncCall
             || $call instanceof Node\Expr\NullsafeMethodCall
@@ -167,9 +157,10 @@ final class ArgumentTypeCoercionFixer extends AbstractFixer {
     /**
      * @return positive-int|null
      */
-    private function extractArgIndex(string $message): ?int {
+    private function extractArgIndex(string $message): ?int
+    {
         if (preg_match('/Argument\s+(\d+)\b/i', $message, $matches) === 1) {
-            $n = (int)$matches[1];
+            $n = (int) $matches[1];
             if ($n >= 1) {
                 return $n;
             }
@@ -181,22 +172,24 @@ final class ArgumentTypeCoercionFixer extends AbstractFixer {
     /**
      * @param list<Node> $stmts
      */
-    private function findCallAtLine(array $stmts, int $line): ?Node\Expr {
+    private function findCallAtLine(array $stmts, int $line): ?Node\Expr
+    {
         $found = null;
         $traverser = new NodeTraverser();
         $traverser->addVisitor(new class($line, $found) extends NodeVisitorAbstract {
             public function __construct(
                 private int $targetLine,
                 private ?Node\Expr &$found,
-            ) {
-            }
+            ) {}
 
             #[\Override]
-            public function enterNode(Node $node): ?int {
+            public function enterNode(Node $node): ?int
+            {
                 if ($node->getStartLine() !== $this->targetLine) {
                     return null;
                 }
-                if ($node instanceof FuncCall
+                if (
+                    $node instanceof FuncCall
                     || $node instanceof Node\Expr\MethodCall
                     || $node instanceof Node\Expr\StaticCall
                     || $node instanceof Node\Expr\NullsafeMethodCall
@@ -221,9 +214,20 @@ final class ArgumentTypeCoercionFixer extends AbstractFixer {
      * @param list<Node> $stmts
      * @param non-empty-string $description
      */
-    private function insertAssert(array &$stmts, PsalmIssue $issue, Node\Expr $condition, string $description): FixResult {
+    private function insertAssert(
+        array &$stmts,
+        PsalmIssue $issue,
+        Node\Expr $condition,
+        string $description,
+    ): FixResult {
         $assert = new FuncCall(new Name('assert'), [new Arg($condition)]);
-        $inserted = $this->insertStatementBefore($stmts, $issue->getLineFrom(), new Expression($assert));
+        $assertStmt = new Expression($assert);
+
+        if ($this->alreadyHasGuardBefore($stmts, $issue->getLineFrom(), $assertStmt)) {
+            return FixResult::notFixed("{$description} already present");
+        }
+
+        $inserted = $this->insertStatementBefore($stmts, $issue->getLineFrom(), $assertStmt);
 
         if ($inserted) {
             return FixResult::fixed("Added {$description}");
@@ -237,7 +241,8 @@ final class ArgumentTypeCoercionFixer extends AbstractFixer {
      *
      * @param list<Node> $stmts
      */
-    private function fallbackSuppress(array $stmts, PsalmIssue $issue): FixResult {
+    private function fallbackSuppress(array $stmts, PsalmIssue $issue): FixResult
+    {
         return $this->attachPsalmSuppress($stmts, $issue->getLineFrom(), 'ArgumentTypeCoercion');
     }
 }

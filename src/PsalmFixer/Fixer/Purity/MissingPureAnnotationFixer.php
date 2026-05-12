@@ -24,26 +24,31 @@ use PsalmFixer\Parser\PsalmIssue;
  * message to disambiguate between pure / mutation-free / external-mutation-free
  * and will report `not fixed` otherwise.
  */
-final class MissingPureAnnotationFixer extends AbstractFixer {
+final class MissingPureAnnotationFixer extends AbstractFixer
+{
     use AppendsPsalmSuppress;
 
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['MissingPureAnnotation', 'MissingImmutableAnnotation'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'MissingPureAnnotationFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Adds @psalm-pure / @psalm-mutation-free / @psalm-immutable annotations requested by Psalm';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $tag = $this->resolveTag($issue);
         if ($tag === null) {
             return FixResult::notFixed('Could not determine which purity annotation to add from message');
@@ -55,7 +60,8 @@ final class MissingPureAnnotationFixer extends AbstractFixer {
     /**
      * @return non-empty-string|null
      */
-    private function resolveTag(PsalmIssue $issue): ?string {
+    private function resolveTag(PsalmIssue $issue): ?string
+    {
         if ($issue->getType() === 'MissingImmutableAnnotation') {
             return '@psalm-immutable';
         }

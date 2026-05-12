@@ -15,33 +15,39 @@ use PsalmFixer\Parser\PsalmIssue;
  * Synchronizes PHPDoc @var with native property type.
  * Removes mismatching @var and lets the native type be the source of truth.
  */
-final class MismatchingDocblockPropertyTypeFixer extends AbstractFixer {
+final class MismatchingDocblockPropertyTypeFixer extends AbstractFixer
+{
     private DocblockHelper $docblockHelper;
 
-    public function __construct() {
+    public function __construct()
+    {
         parent::__construct();
         $this->docblockHelper = new DocblockHelper();
     }
 
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['MismatchingDocblockPropertyType'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'MismatchingDocblockPropertyTypeFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Removes mismatching @var from properties with native types';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $replaced = $this->replaceNodeAtLine($stmts, $issue->getLineFrom(), function (Node $node): ?Node {
-            if (!($node instanceof Property)) {
+            if (!$node instanceof Property) {
                 return null;
             }
 

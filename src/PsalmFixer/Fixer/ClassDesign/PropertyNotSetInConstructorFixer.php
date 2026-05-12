@@ -16,28 +16,42 @@ use PsalmFixer\Fixer\FixResult;
 use PsalmFixer\Parser\PsalmIssue;
 
 /**
- * Adds default values to properties not set in constructor.
+ * Adds `= null` default to nullable properties not initialized in the constructor.
+ *
+ * The fixer is intentionally conservative: it touches only properties whose
+ * declared type already admits `null` (nullable shorthand or a union with null).
+ * For non-nullable properties — even ones with a "safe" zero value like `int`
+ * or `string` — the fixer refuses. Silently defaulting `private int $count;`
+ * to `0` masks the constructor bug that Psalm flagged: code that reads the
+ * property before initialization would have hit `Error: Typed property must
+ * not be accessed before initialization` at runtime, and quietly turning it
+ * into `0` removes that signal.
  */
-final class PropertyNotSetInConstructorFixer extends AbstractFixer {
+final class PropertyNotSetInConstructorFixer extends AbstractFixer
+{
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['PropertyNotSetInConstructor'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'PropertyNotSetInConstructorFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
-        return 'Adds default value to properties not initialized in constructor';
+    public function getDescription(): string
+    {
+        return 'Adds `= null` default to nullable properties not initialized in constructor';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $replaced = $this->replaceNodeAtLine($stmts, $issue->getLineFrom(), static function (Node $node): ?Node {
-            if (!($node instanceof Property)) {
+            if (!$node instanceof Property) {
                 return null;
             }
 
@@ -70,36 +84,29 @@ final class PropertyNotSetInConstructorFixer extends AbstractFixer {
         return FixResult::notFixed('Could not add default value to property');
     }
 
-    private static function getDefaultForType(Node\ComplexType|Identifier|Name|null $type): ?Expr {
+    /**
+     * Returns `null` literal only for types that already admit null. Any other
+     * type is rejected — silently defaulting non-nullable scalars to `0`/`''`/
+     * `false` masks the real constructor bug Psalm is flagging.
+     */
+    private static function getDefaultForType(Node\ComplexType|Identifier|Name|null $type): ?Expr
+    {
         if ($type === null) {
             return new Expr\ConstFetch(new Name('null'));
         }
 
-        // Nullable types default to null
         if ($type instanceof NullableType) {
             return new Expr\ConstFetch(new Name('null'));
         }
 
-        // Union types: if one of the types is null, default to null
         if ($type instanceof UnionType) {
             foreach ($type->types as $unionMember) {
-                if ($unionMember instanceof Identifier && $unionMember->name === 'null') {
+                if ($unionMember instanceof Identifier && strtolower($unionMember->name) === 'null') {
                     return new Expr\ConstFetch(new Name('null'));
                 }
             }
 
             return null;
-        }
-
-        if ($type instanceof Identifier) {
-            return match ($type->name) {
-                'int' => new Node\Scalar\Int_(0),
-                'float' => new Node\Scalar\Float_(0.0),
-                'string' => new Node\Scalar\String_(''),
-                'bool' => new Expr\ConstFetch(new Name('false')),
-                'array' => new Expr\Array_([]),
-                default => null,
-            };
         }
 
         return null;

@@ -14,35 +14,35 @@ use PsalmFixer\Parser\PsalmIssue;
 /**
  * Converts $obj->method() to $obj?->method() for possibly null references.
  */
-final class PossiblyNullReferenceFixer extends AbstractFixer {
+final class PossiblyNullReferenceFixer extends AbstractFixer
+{
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['PossiblyNullReference'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'PossiblyNullReferenceFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Converts ->method() to ?->method() for possibly null objects';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $replaced = $this->replaceNodeAtLine($stmts, $issue->getLineFrom(), static function (Node $node): ?Node {
-            if (!($node instanceof MethodCall)) {
+            if (!$node instanceof MethodCall) {
                 return null;
             }
 
-            return new NullsafeMethodCall(
-                $node->var,
-                $node->name,
-                $node->args,
-                $node->getAttributes(),
-            );
+            return new NullsafeMethodCall($node->var, $node->name, $node->args, $node->getAttributes());
         });
 
         if ($replaced) {

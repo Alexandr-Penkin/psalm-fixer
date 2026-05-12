@@ -18,26 +18,31 @@ use PsalmFixer\Parser\PsalmIssue;
  * property type). The fixer is conservative: it does not rewrite types or
  * insert runtime assertions, so the original behavior is preserved exactly.
  */
-final class PropertyTypeCoercionFixer extends AbstractFixer {
+final class PropertyTypeCoercionFixer extends AbstractFixer
+{
     use AppendsPsalmSuppress;
 
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['PropertyTypeCoercion'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'PropertyTypeCoercionFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Adds @psalm-suppress PropertyTypeCoercion above the offending assignment';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         return $this->attachPsalmSuppress($stmts, $issue->getLineFrom(), 'PropertyTypeCoercion');
     }
 }

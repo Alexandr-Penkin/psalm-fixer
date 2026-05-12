@@ -14,7 +14,8 @@ use SimpleXMLElement;
  * The baseline lists suppressed issues per file but lacks line numbers; this parser
  * resolves each <code> snippet to a source line by reading the referenced file.
  */
-final class PsalmBaselineParser {
+final class PsalmBaselineParser
+{
     /** @var Closure(string): (string|null) */
     private Closure $fileReader;
 
@@ -28,7 +29,8 @@ final class PsalmBaselineParser {
      * @param Closure(string): (string|null) | null $fileReader  Injectable file reader for testability.
      *        Receives an absolute path and returns the file contents, or null if unreadable.
      */
-    public function __construct(?Closure $fileReader = null) {
+    public function __construct(?Closure $fileReader = null)
+    {
         $this->fileReader = $fileReader ?? static function (string $path): ?string {
             if (!is_file($path)) {
                 return null;
@@ -46,7 +48,8 @@ final class PsalmBaselineParser {
      * @param non-empty-string $source Absolute or relative path to the baseline XML file.
      * @return list<PsalmIssue>
      */
-    public function parse(string $source): array {
+    public function parse(string $source): array
+    {
         if (!file_exists($source)) {
             throw new RuntimeException("File not found: {$source}");
         }
@@ -69,11 +72,15 @@ final class PsalmBaselineParser {
      *        Defaults to the current working directory.
      * @return list<PsalmIssue>
      */
-    public function parseXml(string $xml, ?string $basePath = null): array {
+    public function parseXml(string $xml, ?string $basePath = null): array
+    {
         $this->fileLineCache = [];
         $this->warnings = [];
 
-        $basePath = $basePath ?? (getcwd() ?: '.');
+        if ($basePath === null) {
+            $cwd = getcwd();
+            $basePath = $cwd !== false ? $cwd : '.';
+        }
 
         $previous = libxml_use_internal_errors(true);
         try {
@@ -87,9 +94,7 @@ final class PsalmBaselineParser {
         }
 
         if ($root->getName() !== 'files') {
-            throw new RuntimeException(
-                "Invalid Psalm baseline XML: expected root <files>, got <{$root->getName()}>",
-            );
+            throw new RuntimeException("Invalid Psalm baseline XML: expected root <files>, got <{$root->getName()}>");
         }
 
         $result = [];
@@ -120,7 +125,7 @@ final class PsalmBaselineParser {
                         continue;
                     }
 
-                    $rawSnippet = (string)$codeNode;
+                    $rawSnippet = (string) $codeNode;
                     $trimmedSnippet = trim($rawSnippet);
                     if ($trimmedSnippet === '') {
                         $this->warnings[] = "Empty <code> snippet for {$issueType} in {$absolutePath}; skipping.";
@@ -154,16 +159,23 @@ final class PsalmBaselineParser {
     /**
      * @return iterable<SimpleXMLElement>
      */
-    private function iterChildren(SimpleXMLElement $node): iterable {
+    private function iterChildren(SimpleXMLElement $node): iterable
+    {
         $children = $node->children();
         if ($children === null) {
-            return [];
+            return;
         }
 
-        return $children;
+        foreach ($children as $child) {
+            /** @psalm-suppress TypeDoesNotContainNull,RedundantCondition */
+            if ($child !== null) {
+                yield $child;
+            }
+        }
     }
 
-    private function attr(SimpleXMLElement $node, string $name): string {
+    private function attr(SimpleXMLElement $node, string $name): string
+    {
         $attributes = $node->attributes();
         if ($attributes === null) {
             return '';
@@ -174,20 +186,22 @@ final class PsalmBaselineParser {
             return '';
         }
 
-        return (string)$value;
+        return (string) $value;
     }
 
     /**
      * @return list<string>
      */
-    public function getWarnings(): array {
+    public function getWarnings(): array
+    {
         return $this->warnings;
     }
 
     /**
      * @return non-empty-string
      */
-    private function resolvePath(string $src, string $basePath): string {
+    private function resolvePath(string $src, string $basePath): string
+    {
         $isAbsolute = $src !== '' && ($src[0] === '/' || preg_match('#^[A-Za-z]:[\\\\/]#', $src) === 1);
         $candidate = $isAbsolute ? $src : rtrim($basePath, '/\\') . DIRECTORY_SEPARATOR . $src;
 
@@ -202,16 +216,40 @@ final class PsalmBaselineParser {
     }
 
     /**
+     * Map a baseline `<code>` snippet to the source line. Two passes:
+     *   1. Prefer lines whose trimmed content equals the snippet exactly —
+     *      avoids matching the snippet inside a larger expression.
+     *   2. Fall back to substring containment for the (Psalm-typical) case of
+     *      a multi-token snippet that's part of a larger line.
+     * Consumed lines are tracked per-file so two identical baseline snippets
+     * resolve to distinct lines.
+     *
      * @param list<int> $consumedLines
      * @param-out list<int> $consumedLines
      * @return positive-int|null
      */
-    private function resolveLine(string $filePath, string $trimmedSnippet, array &$consumedLines): ?int {
+    private function resolveLine(string $filePath, string $trimmedSnippet, array &$consumedLines): ?int
+    {
         $lines = $this->loadFileLines($filePath);
         if ($lines === null) {
             return null;
         }
 
+        // Pass 1: exact-match on trimmed line.
+        foreach ($lines as $index => $line) {
+            $lineNumber = $index + 1;
+            if (in_array($lineNumber, $consumedLines, true)) {
+                continue;
+            }
+            if (trim($line) === $trimmedSnippet) {
+                $consumedLines[] = $lineNumber;
+                /** @var positive-int $lineNumber */
+                return $lineNumber;
+            }
+        }
+
+        // Pass 2: substring containment (legacy behaviour, matches Psalm's
+        // truncated snippets like `$obj->method()` within a longer expression).
         foreach ($lines as $index => $line) {
             $lineNumber = $index + 1;
             if (in_array($lineNumber, $consumedLines, true)) {
@@ -219,7 +257,6 @@ final class PsalmBaselineParser {
             }
             if (str_contains(trim($line), $trimmedSnippet)) {
                 $consumedLines[] = $lineNumber;
-
                 /** @var positive-int $lineNumber */
                 return $lineNumber;
             }
@@ -233,7 +270,8 @@ final class PsalmBaselineParser {
     /**
      * @return list<string>|null  Returns null when the file cannot be read (warning emitted once).
      */
-    private function loadFileLines(string $filePath): ?array {
+    private function loadFileLines(string $filePath): ?array
+    {
         if (array_key_exists($filePath, $this->fileLineCache)) {
             $cached = $this->fileLineCache[$filePath];
 

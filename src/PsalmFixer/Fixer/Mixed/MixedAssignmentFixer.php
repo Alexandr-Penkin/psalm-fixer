@@ -5,18 +5,16 @@ declare(strict_types=1);
 namespace PsalmFixer\Fixer\Mixed;
 
 use PhpParser\Node;
-use PhpParser\Node\Arg;
-use PhpParser\Node\Expr\Assign;
-use PhpParser\Node\Expr\FuncCall;
-use PhpParser\Node\Expr\Instanceof_;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Expression;
+use PhpParser\Node\Stmt\Foreach_;
 use PhpParser\Node\Stmt\Return_;
 use PsalmFixer\Ast\TypeStringParser;
 use PsalmFixer\Fixer\AbstractFixer;
 use PsalmFixer\Fixer\AppendsPsalmSuppress;
+use PsalmFixer\Fixer\BuildsAssertExpression;
 use PsalmFixer\Fixer\FixResult;
 use PsalmFixer\Parser\PsalmIssue;
 
@@ -31,33 +29,40 @@ use PsalmFixer\Parser\PsalmIssue;
  *      `@psalm-suppress MixedAssignment`. Same conservative fallback used by
  *      `PropertyTypeCoercionFixer` / `ArgumentTypeCoercionFixer`.
  */
-final class MixedAssignmentFixer extends AbstractFixer {
+final class MixedAssignmentFixer extends AbstractFixer
+{
     use AppendsPsalmSuppress;
+    use BuildsAssertExpression;
 
     private TypeStringParser $typeParser;
 
-    public function __construct() {
+    public function __construct()
+    {
         parent::__construct();
         $this->typeParser = new TypeStringParser();
     }
 
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['MixedAssignment'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'MixedAssignmentFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Adds type assertion after mixed assignments';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $assertResult = $this->tryAddAssert($stmts, $issue);
         if ($assertResult !== null) {
             return $assertResult;
@@ -69,11 +74,9 @@ final class MixedAssignmentFixer extends AbstractFixer {
     /**
      * @param list<Node> $stmts
      */
-    private function tryAddAssert(array &$stmts, PsalmIssue $issue): ?FixResult {
-        $varName = $this->extractVarName($issue->getMessage());
-        if ($varName === null) {
-            $varName = $this->extractVarName($issue->getSnippet() ?? '');
-        }
+    private function tryAddAssert(array &$stmts, PsalmIssue $issue): ?FixResult
+    {
+        $varName = self::extractVarName($issue);
         if ($varName === null) {
             return null;
         }
@@ -86,14 +89,25 @@ final class MixedAssignmentFixer extends AbstractFixer {
             return null;
         }
 
-        $assertExpr = $this->buildAssertExpr($varName, $expectedType);
+        $assertExpr = $this->buildAssertExpr($varName, $expectedType, $this->typeParser);
         if ($assertExpr === null) {
             return null;
         }
 
-        $assertStmt = new Expression(
-            new FuncCall(new Name('assert'), [new Arg($assertExpr)]),
-        );
+        $assertStmt = new Expression($this->wrapInAssert($assertExpr));
+
+        // foreach header introduces the iteration variable; the only place
+        // where asserting it makes sense is as the FIRST statement of the
+        // body, not after the foreach (out of scope).
+        if ($this->lineIsForeachHeader($stmts, $issue->getLineFrom(), $varName)) {
+            return $this->insertAtForeachBodyTop($stmts, $issue->getLineFrom(), $assertStmt, $varName);
+        }
+
+        // Regular assignment: insert assert after the assignment line so the
+        // narrowed type is visible to subsequent usages.
+        if ($this->alreadyHasGuardBefore($stmts, $issue->getLineFrom(), $assertStmt)) {
+            return FixResult::notFixed("assert for \${$varName} already present");
+        }
 
         $inserted = $this->insertStatementAfter($stmts, $issue->getLineFrom(), $assertStmt);
         if (!$inserted) {
@@ -104,30 +118,57 @@ final class MixedAssignmentFixer extends AbstractFixer {
     }
 
     /**
+     * Returns true if the line is a foreach header whose value variable is
+     * $varName — meaning the offending mixed assignment is the foreach
+     * iteration itself, not a preceding `=` assignment.
+     *
      * @param list<Node> $stmts
      */
-    private function fallbackSuppress(array $stmts, PsalmIssue $issue): FixResult {
-        return $this->attachPsalmSuppress($stmts, $issue->getLineFrom(), 'MixedAssignment');
+    private function lineIsForeachHeader(array $stmts, int $line, string $varName): bool
+    {
+        $foreach = $this->nodeFinder->findNodeOfTypeAtLine($stmts, $line, Foreach_::class);
+        if (!$foreach instanceof Foreach_) {
+            return false;
+        }
+        return $foreach->valueVar instanceof Variable && $foreach->valueVar->name === $varName;
     }
 
-    private function buildAssertExpr(string $varName, string $type): ?Node\Expr {
-        assert($type !== '');
-        $isFunc = $this->typeParser->getIsTypeFunction($type);
-        if ($isFunc !== null) {
-            return new FuncCall(
-                new Name($isFunc),
-                [new Arg(new Variable($varName))],
-            );
+    /**
+     * Prepend $assertStmt as the first statement of the foreach body covering
+     * $line. Idempotent: scope-walks the body and skips if any sibling matches.
+     *
+     * @param list<Node> $stmts
+     */
+    private function insertAtForeachBodyTop(
+        array &$stmts,
+        int $line,
+        Expression $assertStmt,
+        string $varName,
+    ): FixResult {
+        $foreach = $this->nodeFinder->findNodeOfTypeAtLine($stmts, $line, Foreach_::class);
+        if (!$foreach instanceof Foreach_) {
+            return FixResult::notFixed('Could not locate foreach body');
         }
 
-        if ($this->typeParser->isClassType($type)) {
-            return new Instanceof_(
-                new Variable($varName),
-                new Name\FullyQualified(ltrim($type, '\\')),
-            );
+        /** @var list<Node> $body */
+        $body = $foreach->stmts;
+        // Probe with a line guaranteed to be inside the body — any line > the
+        // foreach header that's not past the end works.
+        $probeLine = $line + 1;
+        if ($this->alreadyHasGuardBefore($body, $probeLine, $assertStmt)) {
+            return FixResult::notFixed("assert for \${$varName} already present");
         }
 
-        return null;
+        array_unshift($foreach->stmts, $assertStmt);
+        return FixResult::fixed("Added assert as first foreach body statement for \${$varName}");
+    }
+
+    /**
+     * @param list<Node> $stmts
+     */
+    private function fallbackSuppress(array $stmts, PsalmIssue $issue): FixResult
+    {
+        return $this->attachPsalmSuppress($stmts, $issue->getLineFrom(), 'MixedAssignment');
     }
 
     /**
@@ -137,7 +178,8 @@ final class MixedAssignmentFixer extends AbstractFixer {
      * @param non-empty-string $varName
      * @return non-empty-string|null
      */
-    private function inferTypeFromContext(array $stmts, int $line, string $varName): ?string {
+    private function inferTypeFromContext(array $stmts, int $line, string $varName): ?string
+    {
         $func = $this->nodeFinder->findContainingFunction($stmts, $line);
         if ($func === null || $func->stmts === null) {
             return null;
@@ -145,7 +187,8 @@ final class MixedAssignmentFixer extends AbstractFixer {
 
         // Check if variable is directly returned → use function return type
         foreach ($func->stmts as $stmt) {
-            if ($stmt instanceof Return_
+            if (
+                $stmt instanceof Return_
                 && $stmt->expr instanceof Variable
                 && $stmt->expr->name === $varName
                 && $func->returnType !== null
@@ -160,7 +203,8 @@ final class MixedAssignmentFixer extends AbstractFixer {
     /**
      * @return non-empty-string|null
      */
-    private function typeNodeToString(Node\ComplexType|Identifier|Name|null $type): ?string {
+    private function typeNodeToString(Node\ComplexType|Identifier|Name|null $type): ?string
+    {
         if ($type instanceof Identifier) {
             $name = $type->name;
             if ($name !== 'void' && $name !== 'never' && $name !== 'mixed') {
@@ -168,20 +212,10 @@ final class MixedAssignmentFixer extends AbstractFixer {
             }
         }
         if ($type instanceof Name) {
-            $name = $type->toString();
-            return $name;
+            return $type->toString();
         }
         if ($type instanceof Node\NullableType) {
             return $this->typeNodeToString($type->type);
-        }
-
-        return null;
-    }
-
-    /** @return non-empty-string|null */
-    private function extractVarName(string $message): ?string {
-        if (preg_match('/\$(\w+)/', $message, $matches) === 1 && $matches[1] !== '') {
-            return $matches[1];
         }
 
         return null;

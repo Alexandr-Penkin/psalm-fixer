@@ -109,6 +109,30 @@ final class TypeDoesNotContainNullFixerTest extends TestCase {
         self::assertStringContainsString("echo 'after'", $output);
     }
 
+    public function testFallsBackToSuppressWhenNoIfAtLine(): void {
+        // `DocblockTypeContradiction` is sometimes raised on a non-condition
+        // expression (e.g. an access like `$fields['x']` where the docblock
+        // claims the value can be null but inference says it cannot). No `if`
+        // to rewrite — fall back to @psalm-suppress on the covering stmt.
+        $code = "<?php\n\$value = \$fields['Created'];\n";
+        $issue = new PsalmIssue(
+            type: 'DocblockTypeContradiction',
+            message: "Cannot resolve types for \$fields['Created'] - docblock-defined type string does not contain null",
+            filePath: '/tmp/t.php',
+            lineFrom: 2,
+            lineTo: 2,
+            columnFrom: 0,
+            columnTo: 0,
+            snippet: null,
+            severity: 'error',
+        );
+
+        $output = $this->runFixer($code, $issue);
+
+        self::assertStringContainsString('@psalm-suppress DocblockTypeContradiction', $output);
+        self::assertStringContainsString("\$value = \$fields['Created']", $output);
+    }
+
     public function testNullOnLeftSideOfComparison(): void {
         // Yoda condition: `null === $x` — null on the left side.
         $code = "<?php\nif (null === \$x) {\n    return 0;\n} else {\n    return \$x;\n}\n";

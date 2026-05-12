@@ -23,7 +23,8 @@ use PhpParser\NodeVisitorAbstract;
  *  - idempotent attachment — re-running the fixer on already-suppressed code
  *    leaves the docblock untouched.
  */
-trait AppendsPsalmSuppress {
+trait AppendsPsalmSuppress
+{
     /**
      * Attach `@psalm-suppress <$issueType>` to the statement covering $line.
      * Returns a FixResult ready to surface to the caller: fixed on success,
@@ -33,7 +34,8 @@ trait AppendsPsalmSuppress {
      * @param list<Node> $stmts
      * @param non-empty-string $issueType
      */
-    private function attachPsalmSuppress(array $stmts, int $line, string $issueType): FixResult {
+    private function attachPsalmSuppress(array $stmts, int $line, string $issueType): FixResult
+    {
         return $this->attachDocTag($stmts, $line, '@psalm-suppress ' . $issueType);
     }
 
@@ -45,7 +47,8 @@ trait AppendsPsalmSuppress {
      * @param list<Node> $stmts
      * @param non-empty-string $tag Full docblock tag to insert (including the leading `@`).
      */
-    private function attachDocTag(array $stmts, int $line, string $tag): FixResult {
+    private function attachDocTag(array $stmts, int $line, string $tag): FixResult
+    {
         $node = $this->findStatementCoveringLine($stmts, $line);
         if ($node === null) {
             return FixResult::notFixed('Could not find statement at target line');
@@ -68,7 +71,8 @@ trait AppendsPsalmSuppress {
      * and `@psalm-suppress RedundantCondition` would falsely match inside
      * `@psalm-suppress RedundantConditionGivenDocblockType`.
      */
-    private function docContainsTag(string $text, string $tag): bool {
+    private function docContainsTag(string $text, string $tag): bool
+    {
         $pattern = '/' . preg_quote($tag, '/') . '(?=\s|\*\/|$)/';
 
         return preg_match($pattern, $text) === 1;
@@ -82,18 +86,19 @@ trait AppendsPsalmSuppress {
      *
      * @param list<Node> $stmts
      */
-    private function findStatementCoveringLine(array $stmts, int $line): ?Node\Stmt {
+    private function findStatementCoveringLine(array $stmts, int $line): ?Node\Stmt
+    {
         $found = null;
         $traverser = new NodeTraverser();
         $traverser->addVisitor(new class($line, $found) extends NodeVisitorAbstract {
             public function __construct(
                 private int $targetLine,
                 private ?Node\Stmt &$found,
-            ) {
-            }
+            ) {}
 
             #[\Override]
-            public function enterNode(Node $node): ?int {
+            public function enterNode(Node $node): ?int
+            {
                 if (!$node instanceof Node\Stmt) {
                     return null;
                 }
@@ -126,7 +131,8 @@ trait AppendsPsalmSuppress {
      *
      * @param non-empty-string $tag
      */
-    private function buildSuppressDoc(?Doc $existing, string $tag): Doc {
+    private function buildSuppressDoc(?Doc $existing, string $tag): Doc
+    {
         if ($existing === null) {
             return new Doc('/** ' . $tag . ' */');
         }

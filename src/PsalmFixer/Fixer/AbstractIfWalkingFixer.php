@@ -14,7 +14,8 @@ use PhpParser\Node\Stmt\If_;
  * methods/control-flow blocks and the common compound-`&&` helpers, so each
  * concrete fixer only implements `tryFixIf()` with its issue-specific logic.
  */
-abstract class AbstractIfWalkingFixer extends AbstractFixer {
+abstract class AbstractIfWalkingFixer extends AbstractFixer
+{
     /**
      * Apply the fixer to the if statement at $index in $stmts. Return a
      * FixResult to signal success (fixed) or a known-but-skipped reason
@@ -33,11 +34,15 @@ abstract class AbstractIfWalkingFixer extends AbstractFixer {
      *
      * @param list<Node\Stmt> $stmts
      */
-    protected function walkAndFix(array &$stmts, int $line): ?FixResult {
+    protected function walkAndFix(array &$stmts, int $line): ?FixResult
+    {
         foreach ($stmts as $index => $stmt) {
             if ($stmt instanceof If_ && $stmt->getStartLine() === $line) {
-                return $this->tryFixIf($stmts, $index, $stmt)
-                    ?? FixResult::notFixed('Could not determine fix for if at target line');
+                return (
+                    $this->tryFixIf($stmts, $index, $stmt) ?? FixResult::notFixed(
+                        'Could not determine fix for if at target line',
+                    )
+                );
             }
 
             // Defensive `!== null` / `is_array` checks match older php-parser
@@ -45,6 +50,7 @@ abstract class AbstractIfWalkingFixer extends AbstractFixer {
             if ($stmt instanceof Node\Stmt\Namespace_) {
                 /** @psalm-suppress RedundantCondition */
                 if ($stmt->stmts !== null) {
+                    /** @mago-expect analysis:possibly-invalid-argument */
                     $result = $this->walkAndFix($stmt->stmts, $line);
                     if ($result !== null) {
                         return $result;
@@ -54,7 +60,10 @@ abstract class AbstractIfWalkingFixer extends AbstractFixer {
             if ($stmt instanceof Node\Stmt\ClassLike) {
                 /** @psalm-suppress RedundantCondition */
                 if (is_array($stmt->stmts)) {
-                    /** @psalm-suppress ArgumentTypeCoercion */
+                    /**
+                     * @psalm-suppress ArgumentTypeCoercion
+                     * @mago-expect analysis:possibly-invalid-argument
+                     */
                     $result = $this->walkAndFix($stmt->stmts, $line);
                     if ($result !== null) {
                         return $result;
@@ -64,14 +73,23 @@ abstract class AbstractIfWalkingFixer extends AbstractFixer {
             if ($stmt instanceof Node\Stmt\ClassMethod || $stmt instanceof Node\Stmt\Function_) {
                 /** @psalm-suppress RedundantCondition */
                 if ($stmt->stmts !== null) {
-                    /** @psalm-suppress ArgumentTypeCoercion */
+                    /**
+                     * @psalm-suppress ArgumentTypeCoercion
+                     * @mago-expect analysis:possibly-invalid-argument
+                     */
                     $result = $this->walkAndFix($stmt->stmts, $line);
                     if ($result !== null) {
                         return $result;
                     }
                 }
             }
-            if ($stmt instanceof If_ || $stmt instanceof Node\Stmt\While_ || $stmt instanceof Node\Stmt\For_ || $stmt instanceof Node\Stmt\Foreach_) {
+            if (
+                $stmt instanceof If_
+                || $stmt instanceof Node\Stmt\While_
+                || $stmt instanceof Node\Stmt\For_
+                || $stmt instanceof Node\Stmt\Foreach_
+            ) {
+                /** @mago-expect analysis:possibly-invalid-argument */
                 $result = $this->walkAndFix($stmt->stmts, $line);
                 if ($result !== null) {
                     return $result;
@@ -88,7 +106,8 @@ abstract class AbstractIfWalkingFixer extends AbstractFixer {
      *
      * @param list<Node\Stmt> $stmts
      */
-    protected function spliceDeadBranch(array &$stmts, int $index, If_ $if): void {
+    protected function spliceDeadBranch(array &$stmts, int $index, If_ $if): void
+    {
         if ($if->else !== null) {
             array_splice($stmts, $index, 1, $if->else->stmts);
             return;
@@ -111,7 +130,8 @@ abstract class AbstractIfWalkingFixer extends AbstractFixer {
      *
      * @return list<Node\Expr>
      */
-    protected function flattenAnd(Node\Expr $cond): array {
+    protected function flattenAnd(Node\Expr $cond): array
+    {
         if ($cond instanceof BinaryOp\BooleanAnd) {
             return array_merge($this->flattenAnd($cond->left), $this->flattenAnd($cond->right));
         }
@@ -124,7 +144,8 @@ abstract class AbstractIfWalkingFixer extends AbstractFixer {
      *
      * @param non-empty-list<Node\Expr> $operands
      */
-    protected function buildAndChain(array $operands): Node\Expr {
+    protected function buildAndChain(array $operands): Node\Expr
+    {
         $result = $operands[0];
         $count = count($operands);
         for ($i = 1; $i < $count; $i++) {

@@ -11,14 +11,18 @@ use PhpParser\NodeVisitorAbstract;
 
 /**
  * Finds AST nodes by position (line/column).
+ *
+ * @psalm-api Public helper for fixer implementations.
  */
-final class NodeFinder {
+final class NodeFinder
+{
     /**
      * Find the deepest node at the given line.
      *
      * @param list<Node> $stmts
      */
-    public function findNodeAtLine(array $stmts, int $line): ?Node {
+    public function findNodeAtLine(array $stmts, int $line): ?Node
+    {
         $found = null;
         $traverser = new NodeTraverser();
         $traverser->addVisitor(new class($line, $found) extends NodeVisitorAbstract {
@@ -33,7 +37,8 @@ final class NodeFinder {
             }
 
             #[\Override]
-            public function enterNode(Node $node): ?int {
+            public function enterNode(Node $node): ?int
+            {
                 if ($node->getStartLine() <= $this->targetLine && $node->getEndLine() >= $this->targetLine) {
                     $this->result = $node;
                     $this->found = $node;
@@ -53,7 +58,8 @@ final class NodeFinder {
      * @param list<Node> $stmts
      * @return list<Node>
      */
-    public function findAllNodesAtLine(array $stmts, int $line): array {
+    public function findAllNodesAtLine(array $stmts, int $line): array
+    {
         /** @var list<Node> $nodes */
         $nodes = [];
         $traverser = new NodeTraverser();
@@ -64,11 +70,11 @@ final class NodeFinder {
             public function __construct(
                 private int $targetLine,
                 private array &$collected,
-            ) {
-            }
+            ) {}
 
             #[\Override]
-            public function enterNode(Node $node): ?int {
+            public function enterNode(Node $node): ?int
+            {
                 if ($node->getStartLine() === $this->targetLine) {
                     $this->collected[] = $node;
                 }
@@ -89,7 +95,8 @@ final class NodeFinder {
      * @param class-string<T> $nodeClass
      * @return T|null
      */
-    public function findNodeOfTypeAtLine(array $stmts, int $line, string $nodeClass): ?Node {
+    public function findNodeOfTypeAtLine(array $stmts, int $line, string $nodeClass): ?Node
+    {
         $nodes = $this->findAllNodesAtLine($stmts, $line);
         foreach ($nodes as $node) {
             if ($node instanceof $nodeClass) {
@@ -106,7 +113,8 @@ final class NodeFinder {
      * @param list<Node> $stmts
      * @param callable(Node): ?Node $replacer
      */
-    public function replaceNodeAtLine(array &$stmts, int $line, callable $replacer): bool {
+    public function replaceNodeAtLine(array &$stmts, int $line, callable $replacer): bool
+    {
         $replaced = false;
         $traverser = new NodeTraverser();
         $traverser->addVisitor(new class($line, $replacer, $replaced) extends NodeVisitorAbstract {
@@ -117,11 +125,11 @@ final class NodeFinder {
                 private int $targetLine,
                 private mixed $replacer,
                 private bool &$replaced,
-            ) {
-            }
+            ) {}
 
             #[\Override]
-            public function leaveNode(Node $node): ?Node {
+            public function leaveNode(Node $node): ?Node
+            {
                 if ($this->replaced) {
                     return null;
                 }
@@ -149,7 +157,8 @@ final class NodeFinder {
      * @param list<Node> $stmts
      * @return Stmt\ClassMethod|Stmt\Function_|null
      */
-    public function findContainingFunction(array $stmts, int $line): Stmt\ClassMethod|Stmt\Function_|null {
+    public function findContainingFunction(array $stmts, int $line): Stmt\ClassMethod|Stmt\Function_|null
+    {
         $found = null;
         $traverser = new NodeTraverser();
         $traverser->addVisitor(new class($line, $found) extends NodeVisitorAbstract {
@@ -167,8 +176,10 @@ final class NodeFinder {
             }
 
             #[\Override]
-            public function enterNode(Node $node): ?int {
-                if (($node instanceof Stmt\ClassMethod || $node instanceof Stmt\Function_)
+            public function enterNode(Node $node): ?int
+            {
+                if (
+                    ($node instanceof Stmt\ClassMethod || $node instanceof Stmt\Function_)
                     && $node->getStartLine() <= $this->targetLine
                     && $node->getEndLine() >= $this->targetLine
                 ) {
@@ -189,19 +200,21 @@ final class NodeFinder {
      *
      * @param list<Node> $stmts
      */
-    public function findContainingClass(array $stmts, int $line): ?Stmt\Class_ {
+    public function findContainingClass(array $stmts, int $line): ?Stmt\Class_
+    {
         $found = null;
         $traverser = new NodeTraverser();
         $traverser->addVisitor(new class($line, $found) extends NodeVisitorAbstract {
             public function __construct(
                 private int $targetLine,
                 private ?Stmt\Class_ &$found,
-            ) {
-            }
+            ) {}
 
             #[\Override]
-            public function enterNode(Node $node): ?int {
-                if ($node instanceof Stmt\Class_
+            public function enterNode(Node $node): ?int
+            {
+                if (
+                    $node instanceof Stmt\Class_
                     && $node->getStartLine() <= $this->targetLine
                     && $node->getEndLine() >= $this->targetLine
                 ) {

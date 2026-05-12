@@ -22,7 +22,8 @@ use PsalmFixer\Parser\PsalmIssue;
  * The fixer is conservative: it never rewrites code, only adds a docblock
  * annotation, so behavior is preserved exactly.
  */
-final class SuppressFallbackFixer extends AbstractFixer {
+final class SuppressFallbackFixer extends AbstractFixer
+{
     use AppendsPsalmSuppress;
 
     /**
@@ -36,22 +37,26 @@ final class SuppressFallbackFixer extends AbstractFixer {
     ];
 
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return self::HANDLED_TYPES;
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'SuppressFallbackFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Adds @psalm-suppress for issue types that cannot be safely auto-rewritten';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
         $type = $issue->getType();
         if (!in_array($type, self::HANDLED_TYPES, true)) {
             return FixResult::notFixed("SuppressFallbackFixer does not handle {$type}");

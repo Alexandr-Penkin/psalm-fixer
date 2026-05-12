@@ -9,6 +9,7 @@ use PhpParser\Node\Expr\BinaryOp;
 use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Stmt\If_;
 use PsalmFixer\Fixer\AbstractIfWalkingFixer;
+use PsalmFixer\Fixer\AppendsPsalmSuppress;
 use PsalmFixer\Fixer\FixResult;
 use PsalmFixer\Parser\PsalmIssue;
 
@@ -23,35 +24,54 @@ use PsalmFixer\Parser\PsalmIssue;
  * Works with baseline input as well as JSON: direction is inferred from the
  * comparison operator in the AST, so no message text is required.
  */
-final class TypeDoesNotContainNullFixer extends AbstractIfWalkingFixer {
+final class TypeDoesNotContainNullFixer extends AbstractIfWalkingFixer
+{
+    use AppendsPsalmSuppress;
+
     private const DIR_TRUE = 'true';
     private const DIR_FALSE = 'false';
 
     #[\Override]
-    public function getSupportedTypes(): array {
+    public function getSupportedTypes(): array
+    {
         return ['TypeDoesNotContainNull', 'DocblockTypeContradiction'];
     }
 
     #[\Override]
-    public function getName(): string {
+    public function getName(): string
+    {
         return 'TypeDoesNotContainNullFixer';
     }
 
     #[\Override]
-    public function getDescription(): string {
+    public function getDescription(): string
+    {
         return 'Removes dead null-check branches where type cannot be null';
     }
 
     #[\Override]
-    public function fix(PsalmIssue $issue, array &$stmts): FixResult {
-        /** @psalm-suppress ArgumentTypeCoercion */
+    public function fix(PsalmIssue $issue, array &$stmts): FixResult
+    {
+        /**
+         * @psalm-suppress ArgumentTypeCoercion
+         * @mago-expect analysis:less-specific-argument
+         */
         $result = $this->walkAndFix($stmts, $issue->getLineFrom());
+        if ($result !== null) {
+            return $result;
+        }
 
-        return $result ?? FixResult::notFixed('Could not find if statement at target line');
+        // No `if` at the target line — typical for `DocblockTypeContradiction`
+        // raised on a non-condition expression where the docblock claims the
+        // value can be null but the inferred type cannot. The runtime shape
+        // can't be rewritten safely (the contradiction is in the docblock,
+        // not the code), so attach a `@psalm-suppress` to the covering stmt.
+        return $this->attachPsalmSuppress($stmts, $issue->getLineFrom(), $issue->getType());
     }
 
     #[\Override]
-    protected function tryFixIf(array &$stmts, int $index, If_ $if): ?FixResult {
+    protected function tryFixIf(array &$stmts, int $index, If_ $if): ?FixResult
+    {
         $direction = $this->inferDirection($if->cond);
         if ($direction === self::DIR_TRUE) {
             array_splice($stmts, $index, 1, $if->stmts);
@@ -76,16 +96,16 @@ final class TypeDoesNotContainNullFixer extends AbstractIfWalkingFixer {
      *
      * @return self::DIR_*|null
      */
-    private function inferDirection(Node\Expr $cond): ?string {
-        if (($cond instanceof BinaryOp\NotIdentical || $cond instanceof BinaryOp\NotEqual)
+    private function inferDirection(Node\Expr $cond): ?string
+    {
+        if (
+            ($cond instanceof BinaryOp\NotIdentical || $cond instanceof BinaryOp\NotEqual)
             && $this->hasNullSide($cond)
         ) {
             return self::DIR_TRUE;
         }
 
-        if (($cond instanceof BinaryOp\Identical || $cond instanceof BinaryOp\Equal)
-            && $this->hasNullSide($cond)
-        ) {
+        if (($cond instanceof BinaryOp\Identical || $cond instanceof BinaryOp\Equal) && $this->hasNullSide($cond)) {
             return self::DIR_FALSE;
         }
 
@@ -95,7 +115,8 @@ final class TypeDoesNotContainNullFixer extends AbstractIfWalkingFixer {
     /**
      * @param list<Node\Stmt> $stmts
      */
-    private function handleCompoundAnd(array &$stmts, int $index, If_ $if): ?FixResult {
+    private function handleCompoundAnd(array &$stmts, int $index, If_ $if): ?FixResult
+    {
         $cond = $if->cond;
         if (!$cond instanceof BinaryOp\BooleanAnd) {
             return null;
@@ -130,7 +151,8 @@ final class TypeDoesNotContainNullFixer extends AbstractIfWalkingFixer {
         return FixResult::fixed('Stripped redundant null-check operand from && chain');
     }
 
-    private function hasNullSide(BinaryOp $cond): bool {
+    private function hasNullSide(BinaryOp $cond): bool
+    {
         foreach ([$cond->left, $cond->right] as $side) {
             if ($side instanceof ConstFetch && strtolower($side->name->toString()) === 'null') {
                 return true;

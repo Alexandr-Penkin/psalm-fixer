@@ -3,11 +3,18 @@
 
 declare(strict_types=1);
 
+$autoloadFound = false;
 foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
     if (file_exists($autoload)) {
         require_once $autoload;
+        $autoloadFound = true;
         break;
     }
+}
+
+if (!$autoloadFound) {
+    fwrite(STDERR, "psalm-fixer: composer autoloader not found. Run `composer install` in the project root.\n");
+    exit(1);
 }
 
 use PsalmFixer\Cli\Application;

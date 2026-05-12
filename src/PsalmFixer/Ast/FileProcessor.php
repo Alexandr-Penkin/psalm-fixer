@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace PsalmFixer\Ast;
 
-use PhpParser\Lexer;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\CloningVisitor;
@@ -12,15 +11,15 @@ use PhpParser\Parser;
 use PhpParser\ParserFactory;
 use PhpParser\PrettyPrinter\Standard;
 use PsalmFixer\Fixer\FixerRegistry;
-use PsalmFixer\Fixer\FixResult;
 use PsalmFixer\Parser\PsalmIssue;
 use PsalmFixer\Report\FixReport;
-use RuntimeException;
+use Throwable;
 
 /**
  * Central engine: parses files, applies fixers, saves with format-preserving printing.
  */
-final class FileProcessor {
+final class FileProcessor
+{
     private Parser $parser;
     private Standard $printer;
 
@@ -72,13 +71,8 @@ final class FileProcessor {
      * @param non-empty-string $filePath
      * @param list<PsalmIssue> $issues
      */
-    private function processFile(
-        string $filePath,
-        array $issues,
-        bool $dryRun,
-        bool $backup,
-        FixReport $report,
-    ): void {
+    private function processFile(string $filePath, array $issues, bool $dryRun, bool $backup, FixReport $report): void
+    {
         if (!file_exists($filePath)) {
             $report->addSkipped($filePath, 'File not found');
             return;
@@ -147,8 +141,9 @@ final class FileProcessor {
 
         try {
             $newCode = $this->printer->printFormatPreserving($stmts, $oldStmts, $oldTokens);
-        } catch (\AssertionError) {
+        } catch (Throwable) {
             // Format-preserving printing fails when node types change (e.g. MethodCall -> NullsafeMethodCall)
+            // or when assertions are disabled and an invariant trips a different error type.
             $newCode = $this->printer->prettyPrintFile($stmts);
         }
         // Ensure trailing newline
@@ -156,14 +151,27 @@ final class FileProcessor {
             $newCode .= "\n";
         }
 
+        // Sanity check: rewritten source must parse, otherwise we'd write broken PHP.
+        if ($this->parser->parse($newCode) === null) {
+            $report->addSkipped($filePath, 'Rewritten source failed to parse — file left untouched');
+            return;
+        }
+
         if ($dryRun) {
             $report->addDiff($filePath, $originalCode, $newCode);
-        } else {
-            if ($backup) {
-                $backupPath = $filePath . '.bak';
-                file_put_contents($backupPath, $originalCode);
+            return;
+        }
+
+        if ($backup) {
+            $backupPath = $filePath . '.bak';
+            if (file_put_contents($backupPath, $originalCode) === false) {
+                $report->addSkipped($filePath, "Could not write backup file: {$backupPath}");
+                return;
             }
-            file_put_contents($filePath, $newCode);
+        }
+
+        if (file_put_contents($filePath, $newCode) === false) {
+            $report->addSkipped($filePath, 'Could not write file');
         }
     }
 
@@ -173,7 +181,8 @@ final class FileProcessor {
      * @param list<non-empty-string>|null $fileFilter
      * @return list<PsalmIssue>
      */
-    private function filterIssues(array $issues, ?array $issueTypeFilter, ?array $fileFilter): array {
+    private function filterIssues(array $issues, ?array $issueTypeFilter, ?array $fileFilter): array
+    {
         $result = [];
         foreach ($issues as $issue) {
             if ($issueTypeFilter !== null && !in_array($issue->getType(), $issueTypeFilter, true)) {
